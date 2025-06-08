@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>YTDLP Manager</title>
+    <script src="https://unpkg.com/htmx.org@1.9.5"></script>
+    <style>
+        body { font-family: sans-serif; margin: 2em; }
+        form { margin-bottom: 1em; }
+        ul { padding-left: 0; list-style: none; }
+        li { display: flex; justify-content: space-between; margin: 0.5em 0; }
+    </style>
+</head>
+<body>
+<h2>Scheduled Task Parameters</h2>
+
+<input
+        type="text"
+        name="parameters"
+        value="{{ config.options.parameters if config.options.parameters else '' }}"
+        hx-post="/set-parameters"
+        hx-include="[name=parameters]"
+        hx-trigger="change"
+        hx-swap="none"
+/>
+
+<h1>Channels / Playlists</h1>
+
+<form hx-post="/add" hx-target="#item-list" hx-swap="innerHTML">
+    <input type="text" name="item" placeholder="Add item" required>
+    <button type="submit">Add</button>
+</form>
+
+<ul id="item-list" hx-get="/items" hx-trigger="load">
+    <!-- Items will be loaded here dynamically -->
+</ul>
+</body>
+</html>

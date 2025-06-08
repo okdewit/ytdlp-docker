@@ -1,0 +1,4 @@
+<li id="item-{{ item }}">
+  <span>{{ item }}</span>
+  <button hx-delete="/remove/{{ item }}" hx-target="#item-list" hx-swap="innerHTML">Remove</button>
+</li>
