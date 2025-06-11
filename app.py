@@ -65,7 +65,7 @@ def set_parameters():
     save_config(config)
     return "", 204  # No content, because we're not swapping any HTML
 
-scheduler.add_job(scheduled_task, "interval", minutes=60)
+scheduler.add_job(scheduled_task, "interval", minutes=2)
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0")
