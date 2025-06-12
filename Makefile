@@ -12,6 +12,7 @@ run: stop
 	--name $(CONTAINER_NAME) \
 	-p $(PORT) \
 	-v $(PWD)/data:/app/data \
+	-v $(PWD)/config:/app/config \
 	$(IMAGE_NAME)
 
 sh:

@@ -26,7 +26,11 @@
 
 <h1>Channels / Playlists</h1>
 
-<form hx-post="/add" hx-target="#item-list" hx-swap="innerHTML">
+<form
+    hx-post="/add"
+    hx-target="#item-list"
+    hx-swap="innerHTML"
+>
     <input type="text" name="item" placeholder="Add item" required>
     <button type="submit">Add</button>
 </form>

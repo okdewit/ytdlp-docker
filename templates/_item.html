@@ -1,4 +1,14 @@
-<li id="item-{{ item }}">
-  <span>{{ item }}</span>
-  <button hx-delete="/remove/{{ item }}" hx-target="#item-list" hx-swap="innerHTML">Remove</button>
+<li id="item-{{ item['url'] | urlencode }}">
+  <span>{{ item['channel'] }} ({{ item['url'] }})</span>
+  <div>
+    <button
+        hx-delete="/remove/{{ item['url'] | urlencode }}"
+        hx-target="#item-list"
+        hx-swap="innerHTML">Remove</button>
+
+    <button
+        hx-post="/update/{{ item['url'] | urlencode }}"
+        hx-target="#item-list"
+        hx-swap="innerHTML">Run Now</button>
+  </div>
 </li>
