@@ -1,3 +1,5 @@
+import os
+import shutil
 import json
 
 from flask import Flask, render_template, request
@@ -11,9 +13,18 @@ app = Flask(__name__)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-CONFIG_FILE = "config/config.json"
+CONFIG_FILE = "config/default_config.json"
+DEFAULT_CONFIG = "default_config.json"
+
 
 def load_config():
+    # If config file doesn't exist, copy the default
+    if not os.path.exists(CONFIG_FILE):
+        os.makedirs(os.path.dirname(CONFIG_FILE), exist_ok=True)
+        shutil.copy(DEFAULT_CONFIG, CONFIG_FILE)
+        print(f"Copied default config to {CONFIG_FILE}")
+
+    # Now load the config
     with open(CONFIG_FILE) as f:
         return json.load(f)
 
