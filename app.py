@@ -13,7 +13,7 @@ app = Flask(__name__)
 scheduler = BackgroundScheduler()
 scheduler.start()
 
-CONFIG_FILE = "config/default_config.json"
+CONFIG_FILE = "config/config.json"
 DEFAULT_CONFIG = "default_config.json"
 
 

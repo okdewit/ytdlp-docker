@@ -11,8 +11,10 @@ def enrich_item(item):
     Returns True if enrichment succeeded, False otherwise.
     """
     try:
+        logger.info('starting enrichment for item ' + item["url"])
+
         result = subprocess.run(
-            ["./yt-dlp", "-J", item["url"]],
+            ["./yt-dlp", "--flat-playlist", "-J", item["url"]],
             capture_output=True,
             text=True,
             check=True
