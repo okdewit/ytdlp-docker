@@ -84,7 +84,6 @@ def update_item(url):
 
 # Initialize database on startup
 database.init_database()
-database.migrate_from_json()
 
 scheduler.add_job(scheduled_task, "interval", minutes=120)
 

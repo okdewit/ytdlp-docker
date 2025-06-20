@@ -1,264 +1,231 @@
 import os
-import sqlite3
-import json
-from contextlib import contextmanager
+from datetime import datetime
+from pony.orm import *
 from util import logger
 
-DATABASE = "config/app.db"
+# Database setup
+db = Database()
 
 # Default yt-dlp parameters
 DEFAULT_PARAMETERS = '-f "bv[vcodec^=av01][height<=1080]+ba/bv[ext=mp4][height<=1080]+ba/b[height<=1080]" --merge-output-format mp4 -o "%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s" --write-subs --sub-langs "en.*" --download-archive data/downloaded.txt --sponsorblock-mark all --sponsorblock-remove sponsor --embed-metadata --embed-thumbnail --write-info-json --write-desktop-link --write-description --write-thumbnail --convert-thumbnail jpg -P "data"'
 
+DATABASE_PATH = "config/app.db"
 
-@contextmanager
-def get_db():
-    """Context manager for database connections."""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row  # This allows accessing columns by name
-    try:
-        yield conn
-    finally:
-        conn.close()
+
+class Item(db.Entity):
+    """Item entity representing a video, playlist, or channel."""
+    _table_ = 'items'  # Explicitly set table name to match existing
+    id = PrimaryKey(int, auto=True)  # Add explicit primary key to match existing schema
+    url = Required(str, unique=True)
+    title = Optional(str)
+    description = Optional(str)
+    duration = Optional(str)
+    channel = Optional(str)
+    item_type = Optional(str, column='type')  # Map to 'type' column
+    created_at = Required(datetime, default=lambda: datetime.now())
+    updated_at = Required(datetime, default=lambda: datetime.now())
+
+
+class Config(db.Entity):
+    """Config entity for storing key-value configuration pairs."""
+    _table_ = 'config'  # Explicitly set table name to match existing
+    key = PrimaryKey(str)
+    value = Optional(str)
+    updated_at = Required(datetime, default=lambda: datetime.now())
 
 
 def init_database():
-    """Initialize the database with required tables."""
-    os.makedirs(os.path.dirname(DATABASE), exist_ok=True)
+    """Initialize the database and create tables."""
+    # Ensure config directory exists
+    os.makedirs(os.path.dirname(DATABASE_PATH), exist_ok=True)
 
-    with sqlite3.connect(DATABASE) as conn:
+    # Bind database
+    db.bind('sqlite', DATABASE_PATH)
+
+    # Check if database file exists
+    if os.path.exists(DATABASE_PATH):
+        logger.info("Existing database found, checking schema compatibility...")
+
+        # For existing database, we need to check if the type column exists
+        # and add it if it doesn't, before generating mapping
+        import sqlite3
+        conn = sqlite3.connect(DATABASE_PATH)
         cursor = conn.cursor()
 
-        # Create items table
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                url TEXT UNIQUE NOT NULL,
-                title TEXT,
-                description TEXT,
-                duration TEXT,
-                channel TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        # Check if type column exists in items table
+        cursor.execute("PRAGMA table_info(items)")
+        columns = [row[1] for row in cursor.fetchall()]
 
-        # Create config table for storing key-value pairs
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS config (
-                key TEXT PRIMARY KEY,
-                value TEXT,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        if 'type' not in columns:
+            logger.info("Adding 'type' column to items table")
+            cursor.execute("ALTER TABLE items ADD COLUMN type TEXT")
+            conn.commit()
 
-        # Insert default parameters if not exists
-        cursor.execute('''
-            INSERT OR IGNORE INTO config (key, value) 
-            VALUES ('parameters', ?)
-        ''', (DEFAULT_PARAMETERS,))
+        conn.close()
 
-        conn.commit()
+        # Now we can safely generate mapping
+        db.generate_mapping(create_tables=False)
+    else:
+        # New database
+        logger.info("Creating new database...")
+        db.generate_mapping(create_tables=True)
 
-        logger.info(f"Database initialized with default parameters: {DEFAULT_PARAMETERS[:100]}...")
+    # Set up default parameters if they don't exist
+    with db_session:
+        if not Config.exists(key='parameters'):
+            Config(key='parameters', value=DEFAULT_PARAMETERS)
+            logger.info(f"Database initialized with default parameters: {DEFAULT_PARAMETERS[:100]}...")
 
 
-def migrate_from_json():
-    """Migrate existing JSON config to SQLite if it exists."""
-    config_file = "config/config.json"
-
-    if os.path.exists(config_file):
-        try:
-            with open(config_file) as f:
-                config = json.load(f)
-
-            with get_db() as conn:
-                cursor = conn.cursor()
-
-                # Migrate parameters
-                parameters = config.get("options", {}).get("parameters", "")
-                cursor.execute(
-                    "INSERT OR REPLACE INTO config (key, value) VALUES (?, ?)",
-                    ("parameters", parameters)
-                )
-
-                # Migrate items
-                for item in config.get("items", []):
-                    cursor.execute('''
-                        INSERT OR IGNORE INTO items (url, title, description, duration, channel)
-                        VALUES (?, ?, ?, ?, ?)
-                    ''', (
-                        item["url"],
-                        item.get("title", ""),
-                        item.get("description", ""),
-                        item.get("duration", ""),
-                        item.get("channel", "")
-                    ))
-
-                conn.commit()
-
-            # Backup the old config file
-            backup_name = config_file + ".backup"
-            os.rename(config_file, backup_name)
-            logger.info(f"Migrated config from JSON to SQLite. Old config backed up as {backup_name}")
-
-        except Exception as e:
-            logger.error(f"Error migrating from JSON: {e}")
-
-
+@db_session
 def get_config():
     """Get configuration as a dictionary (for template compatibility)."""
-    with get_db() as conn:
-        cursor = conn.cursor()
+    # Get parameters
+    params_config = Config.get(key='parameters')
+    parameters = params_config.value if params_config else ""
 
-        # Get parameters
-        cursor.execute("SELECT value FROM config WHERE key = 'parameters'")
-        params_row = cursor.fetchone()
-        parameters = params_row[0] if params_row else ""
+    # Get all items
+    items = []
+    for item in select(i for i in Item).order_by(desc(Item.created_at)):
+        items.append({
+            "url": item.url,
+            "title": item.title or "",
+            "description": item.description or "",
+            "duration": item.duration or "",
+            "channel": item.channel or "",
+            "type": item.item_type or ""
+        })
 
-        # Get all items
-        cursor.execute('''
-            SELECT url, title, description, duration, channel 
-            FROM items 
-            ORDER BY created_at DESC
-        ''')
-        items = []
-        for row in cursor.fetchall():
-            items.append({
-                "url": row["url"],
-                "title": row["title"] or "",
-                "description": row["description"] or "",
-                "duration": row["duration"] or "",
-                "channel": row["channel"] or ""
-            })
-
-        return {
-            "options": {"parameters": parameters},
-            "items": items
-        }
+    return {
+        "options": {"parameters": parameters},
+        "items": items
+    }
 
 
+@db_session
 def get_all_items():
     """Get all items from database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT url, title, description, duration, channel 
-            FROM items 
-            ORDER BY created_at DESC
-        ''')
-        items = []
-        for row in cursor.fetchall():
-            items.append({
-                "url": row["url"],
-                "title": row["title"] or "",
-                "description": row["description"] or "",
-                "duration": row["duration"] or "",
-                "channel": row["channel"] or ""
-            })
-        return items
+    items = []
+    for item in select(i for i in Item).order_by(desc(Item.created_at)):
+        items.append({
+            "url": item.url,
+            "title": item.title or "",
+            "description": item.description or "",
+            "duration": item.duration or "",
+            "channel": item.channel or "",
+            "type": item.item_type or ""
+        })
+    return items
 
 
-def add_item(item):
+@db_session
+def add_item(item_data):
     """Add an item to the database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR IGNORE INTO items (url, title, description, duration, channel)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (
-            item["url"],
-            item.get("title", ""),
-            item.get("description", ""),
-            item.get("duration", ""),
-            item.get("channel", "")
-        ))
-        conn.commit()
-        return cursor.rowcount > 0  # Returns True if item was inserted
+    try:
+        Item(
+            url=item_data["url"],
+            title=item_data.get("title", ""),
+            description=item_data.get("description", ""),
+            duration=item_data.get("duration", ""),
+            channel=item_data.get("channel", ""),
+            item_type=item_data.get("type", "")
+        )
+        return True
+    except Exception as e:
+        logger.error(f"Error adding item: {e}")
+        return False
 
 
+@db_session
 def remove_item(url):
     """Remove an item from the database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM items WHERE url = ?", (url,))
-        conn.commit()
-        return cursor.rowcount > 0  # Returns True if item was deleted
+    try:
+        item = Item.get(url=url)
+        if item:
+            item.delete()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error removing item: {e}")
+        return False
 
 
+@db_session
 def get_parameters():
     """Get the current parameters from config."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM config WHERE key = 'parameters'")
-        row = cursor.fetchone()
-        return row[0] if row else ""
+    config = Config.get(key='parameters')
+    return config.value if config else ""
 
 
+@db_session
 def set_parameters(parameters):
     """Set parameters in the database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO config (key, value, updated_at) 
-            VALUES ('parameters', ?, CURRENT_TIMESTAMP)
-        ''', (parameters,))
-        conn.commit()
+    try:
+        config = Config.get(key='parameters')
+        if config:
+            config.value = parameters
+            config.updated_at = datetime.now()
+        else:
+            Config(key='parameters', value=parameters)
+        return True
+    except Exception as e:
+        logger.error(f"Error setting parameters: {e}")
+        return False
 
 
+@db_session
 def get_item_by_url(url):
     """Get a specific item by URL."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            SELECT url, title, description, duration, channel 
-            FROM items 
-            WHERE url = ?
-        ''', (url,))
-        row = cursor.fetchone()
-        if row:
-            return {
-                "url": row["url"],
-                "title": row["title"] or "",
-                "description": row["description"] or "",
-                "duration": row["duration"] or "",
-                "channel": row["channel"] or ""
-            }
-        return None
+    item = Item.get(url=url)
+    if item:
+        return {
+            "url": item.url,
+            "title": item.title or "",
+            "description": item.description or "",
+            "duration": item.duration or "",
+            "channel": item.channel or "",
+            "type": item.item_type or ""
+        }
+    return None
 
 
-def update_item(item):
+@db_session
+def update_item(item_data):
     """Update an item in the database."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            UPDATE items 
-            SET title = ?, description = ?, duration = ?, channel = ?, updated_at = CURRENT_TIMESTAMP
-            WHERE url = ?
-        ''', (
-            item.get("title", ""),
-            item.get("description", ""),
-            item.get("duration", ""),
-            item.get("channel", ""),
-            item["url"]
-        ))
-        conn.commit()
+    try:
+        item = Item.get(url=item_data["url"])
+        if item:
+            item.title = item_data.get("title", "")
+            item.description = item_data.get("description", "")
+            item.duration = item_data.get("duration", "")
+            item.channel = item_data.get("channel", "")
+            item.item_type = item_data.get("type", "")
+            item.updated_at = datetime.now()
+            return True
+        return False
+    except Exception as e:
+        logger.error(f"Error updating item: {e}")
+        return False
 
 
+@db_session
 def get_config_value(key, default=None):
     """Get a specific config value by key."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute("SELECT value FROM config WHERE key = ?", (key,))
-        row = cursor.fetchone()
-        return row[0] if row else default
+    config = Config.get(key=key)
+    return config.value if config else default
 
 
+@db_session
 def set_config_value(key, value):
     """Set a specific config value."""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('''
-            INSERT OR REPLACE INTO config (key, value, updated_at) 
-            VALUES (?, ?, CURRENT_TIMESTAMP)
-        ''', (key, value))
-        conn.commit()
+    try:
+        config = Config.get(key=key)
+        if config:
+            config.value = value
+            config.updated_at = datetime.now()
+        else:
+            Config(key=key, value=value)
+        return True
+    except Exception as e:
+        logger.error(f"Error setting config value: {e}")
+        return False

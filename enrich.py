@@ -24,13 +24,13 @@ def enrich_item(item):
         # Channel name
         item["channel"] = metadata.get("channel", "Unknown Channel")
 
-        logger.info('enrichting item ' + item["url"] + ' with channel name ' + item["channel"])
+        logger.info('enriching item ' + item["url"] + ' with channel name ' + item["channel"])
 
         # Determine type
         _type = metadata.get("_type")
         extractor = metadata.get("extractor")
 
-        logger.info('found type ' + _type + ', ' + extractor + ' for ' + item["url"])
+        logger.info('found type ' + str(_type) + ', ' + str(extractor) + ' for ' + item["url"])
 
         if not _type or _type == 'video':
             item["type"] = "video"
@@ -44,8 +44,10 @@ def enrich_item(item):
         return True
 
     except subprocess.CalledProcessError as e:
-        print(f"yt-dlp failed for {item['url']}: {e.stderr}")
+        logger.error(f"yt-dlp failed for {item['url']}: {e.stderr}")
     except json.JSONDecodeError as e:
-        print(f"Invalid JSON for {item['url']}: {e}")
+        logger.error(f"Invalid JSON for {item['url']}: {e}")
+    except Exception as e:
+        logger.error(f"Unexpected error enriching {item['url']}: {e}")
 
     return False

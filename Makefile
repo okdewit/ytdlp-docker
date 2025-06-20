@@ -6,12 +6,10 @@ PORT = 5001:5000
 ifeq ($(OS),Windows_NT)
     PWD := $(shell cd)
     NULL_REDIRECT := >nul 2>&1
-    SHELL_CMD := cmd
     OR_TRUE := || exit 0
 else
     PWD := $(shell pwd)
     NULL_REDIRECT := >/dev/null 2>&1
-    SHELL_CMD := /bin/bash
     OR_TRUE := || true
 endif
 
@@ -20,7 +18,7 @@ endif
 build: rm
 	docker build -t $(IMAGE_NAME) .
 
-prune:
+clean:
 	docker system prune -a
 
 run: stop
@@ -32,7 +30,7 @@ run: stop
 		$(IMAGE_NAME)
 
 sh:
-	docker exec -it $(CONTAINER_NAME) $(SHELL_CMD)
+	docker exec -it $(CONTAINER_NAME) /bin/bash
 
 stop:
 	-docker stop $(CONTAINER_NAME) $(NULL_REDIRECT) $(OR_TRUE)
