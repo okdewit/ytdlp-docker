@@ -25,7 +25,8 @@ def scheduled_task():
 @app.route("/")
 def index():
     config = database.get_config()
-    return render_template("index.html", config=config)
+    items = database.get_all_items()
+    return render_template("index.html", config=config, items=items)
 
 
 @app.route("/items")

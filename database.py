@@ -34,6 +34,18 @@ class Config(db.Entity):
     updated_at = Required(datetime, default=lambda: datetime.now())
 
 
+def _item_to_dict(item):
+    """Convert an Item entity to a dictionary."""
+    return {
+        "url": item.url,
+        "title": item.title or "",
+        "description": item.description or "",
+        "duration": item.duration or "",
+        "channel": item.channel or "",
+        "type": item.item_type or ""
+    }
+
+
 def init_database():
     """Initialize the database and create tables."""
     # Ensure config directory exists
@@ -79,43 +91,19 @@ def init_database():
 
 @db_session
 def get_config():
-    """Get configuration as a dictionary (for template compatibility)."""
-    # Get parameters
+    """Get configuration as a dictionary."""
     params_config = Config.get(key='parameters')
     parameters = params_config.value if params_config else ""
 
-    # Get all items
-    items = []
-    for item in select(i for i in Item).order_by(desc(Item.created_at)):
-        items.append({
-            "url": item.url,
-            "title": item.title or "",
-            "description": item.description or "",
-            "duration": item.duration or "",
-            "channel": item.channel or "",
-            "type": item.item_type or ""
-        })
-
     return {
-        "options": {"parameters": parameters},
-        "items": items
+        "options": {"parameters": parameters}
     }
 
 
 @db_session
 def get_all_items():
     """Get all items from database."""
-    items = []
-    for item in select(i for i in Item).order_by(desc(Item.created_at)):
-        items.append({
-            "url": item.url,
-            "title": item.title or "",
-            "description": item.description or "",
-            "duration": item.duration or "",
-            "channel": item.channel or "",
-            "type": item.item_type or ""
-        })
-    return items
+    return [_item_to_dict(item) for item in select(i for i in Item).order_by(desc(Item.created_at))]
 
 
 @db_session
@@ -178,14 +166,7 @@ def get_item_by_url(url):
     """Get a specific item by URL."""
     item = Item.get(url=url)
     if item:
-        return {
-            "url": item.url,
-            "title": item.title or "",
-            "description": item.description or "",
-            "duration": item.duration or "",
-            "channel": item.channel or "",
-            "type": item.item_type or ""
-        }
+        return _item_to_dict(item)
     return None
 
 
