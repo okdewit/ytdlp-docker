@@ -1,37 +1,23 @@
 # enrich.py - Updated for subscriptions
 import subprocess
+import json
 from util import logger
 from database import add_channel, get_channel_by_id, add_video
 
 
 def get_ytdlp_info(url):
-    """Get all needed info from yt-dlp in a single call."""
+    """Get all needed info from yt-dlp using JSON output."""
     try:
-        # Get all the info we need in one call using newlines as separators
-        format_str = "%(extractor)s\n%(channel)s\n%(channel_id)s\n%(channel_url)s\n%(id)s\n%(title)s\n%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s"
-
         result = subprocess.run(
-            ["./yt-dlp", "--print", format_str, url],
+            ["./yt-dlp", "--flat-playlist", "-J", url],
             capture_output=True,
             text=True,
             check=True,
             timeout=30
         )
 
-        lines = result.stdout.strip().split('\n')
-        if len(lines) < 7:
-            logger.error(f"Unexpected output format from yt-dlp for {url}")
-            return None
-
-        return {
-            "extractor": lines[0],
-            "channel": lines[1],
-            "channel_id": lines[2],
-            "channel_url": lines[3],
-            "video_id": lines[4],
-            "title": lines[5],
-            "expected_filename": lines[6]
-        }
+        data = json.loads(result.stdout)
+        return data
 
     except subprocess.TimeoutExpired:
         logger.error(f"Timeout getting info for {url}")
@@ -39,23 +25,44 @@ def get_ytdlp_info(url):
     except subprocess.CalledProcessError as e:
         logger.error(f"yt-dlp failed for {url}: {e.stderr}")
         return None
+    except json.JSONDecodeError as e:
+        logger.error(f"Failed to parse JSON from yt-dlp for {url}: {e}")
+        return None
     except Exception as e:
         logger.error(f"Unexpected error getting info for {url}: {e}")
         return None
 
 
-def determine_subscription_type(extractor):
-    """Determine if URL is a video, playlist, or channel based on extractor."""
-    if not extractor:
+def determine_subscription_type(data):
+    """Determine if URL is a video, playlist, or channel based on JSON data."""
+    if not data:
         return "unknown"
 
-    logger.info(f'Found extractor: {extractor}')
+    # Check the _type field first
+    entry_type = data.get("_type", "")
+    extractor = data.get("extractor", "")
 
+    logger.info(f'Found _type: {entry_type}, extractor: {extractor}')
+
+    # Determine type based on _type field
+    if entry_type == "playlist":
+        # Could be a channel or actual playlist
+        extractor_key = data.get("extractor_key", "")
+        if extractor_key in ("YoutubeTab", "YoutubeChannel"):
+            return "channel"
+        else:
+            return "playlist"
+    elif entry_type == "video":
+        return "video"
+    elif entry_type in ("channel", "url_transparent"):
+        return "channel"
+
+    # Fallback to extractor
     if extractor == "youtube":
         return "video"
     elif extractor == "youtube:playlist":
         return "playlist"
-    elif extractor in ("youtube:channel", "youtube:user"):
+    elif extractor in ("youtube:channel", "youtube:user", "youtube:tab"):
         return "channel"
     else:
         return "unknown"
@@ -69,22 +76,23 @@ def enrich_subscription(subscription):
     url = subscription["url"]
     logger.info(f'Starting enrichment for subscription: {url}')
 
-    # Get all info in a single call
-    info = get_ytdlp_info(url)
-    if not info:
+    # Get all info using JSON output
+    data = get_ytdlp_info(url)
+    if not data:
         logger.error(f"Could not get info for {url}")
         return False
 
-    # Determine subscription type from extractor
-    subscription_type = determine_subscription_type(info.get("extractor"))
+    # Determine subscription type from JSON data
+    subscription_type = determine_subscription_type(data)
     subscription["type"] = subscription_type
 
     if subscription_type == "unknown":
         logger.error(f"Could not determine type for {url}")
         return False
 
-    channel_name = info.get("channel", "Unknown Channel")
-    channel_id = info.get("channel_id", "")
+    # Extract channel information
+    channel_name = data.get("channel", data.get("uploader", data.get("title", "Unknown Channel")))
+    channel_id = data.get("channel_id", data.get("uploader_id", ""))
 
     subscription["channel"] = channel_name
     subscription["channel_id"] = channel_id
@@ -96,9 +104,16 @@ def enrich_subscription(subscription):
 
     # If it's a video, add it to the videos table
     if subscription_type == "video":
-        video_id = info.get("video_id", "")
-        title = info.get("title", "Unknown Title")
-        expected_filename = info.get("expected_filename", "")
+        video_id = data.get("id", "")
+        title = data.get("title", "Unknown Title")
+        # Build expected filename
+        uploader = data.get("uploader", "Unknown")
+        upload_date = data.get("upload_date", "")
+        if upload_date and len(upload_date) >= 8:
+            formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+        else:
+            formatted_date = "Unknown-Date"
+        expected_filename = f"{uploader}/{formatted_date} - {title} [{video_id}].mp4"
 
         if video_id:
             add_video(video_id, title, channel_id, expected_filename)
@@ -129,28 +144,33 @@ def populate_videos_from_channel(channel_id):
 
     # Use yt-dlp to get video info from the channel
     try:
-        format_str = "%(id)s\n%(title)s\n%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s"
-
         result = subprocess.run([
             "./yt-dlp",
             "--flat-playlist",
-            "--print", format_str,
+            "-J",
             f"https://www.youtube.com/channel/{channel_id}/videos"
         ], capture_output=True, text=True, check=True, timeout=60)
 
-        lines = result.stdout.strip().split('\n')
+        data = json.loads(result.stdout)
+        entries = data.get("entries", [])
 
-        # Process videos in groups of 3 lines (id, title, expected_filename)
-        for i in range(0, len(lines), 3):
-            if i + 2 < len(lines):
-                video_id = lines[i].strip()
-                title = lines[i + 1].strip()
-                expected_filename = lines[i + 2].strip()
+        for entry in entries:
+            video_id = entry.get("id", "")
+            title = entry.get("title", "Unknown Title")
+            uploader = entry.get("uploader", channel["name"])
+            upload_date = entry.get("upload_date", "")
 
-                if video_id and title:
-                    add_video(video_id, title, channel_id, expected_filename)
+            if upload_date and len(upload_date) >= 8:
+                formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+            else:
+                formatted_date = "Unknown-Date"
 
-        logger.info(f'Populated videos for channel: {channel["name"]}')
+            expected_filename = f"{uploader}/{formatted_date} - {title} [{video_id}].mp4"
+
+            if video_id and title:
+                add_video(video_id, title, channel_id, expected_filename)
+
+        logger.info(f'Populated {len(entries)} videos for channel: {channel["name"]}')
         return True
 
     except Exception as e:
