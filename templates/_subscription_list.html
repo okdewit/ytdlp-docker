@@ -41,16 +41,16 @@
                                 <div class="subscription-url">{{ subscription.url }}</div>
 
                                 <div class="subscription-status">
-                                    <!-- Download Scope -->
-                                    <span class="sync-scope {{ subscription.get('sync_scope', 'single_video') }}">
-                                        {% if subscription.get('sync_scope') == 'single_video' %}
-                                            🎯 Single Video Only
-                                        {% elif subscription.get('sync_scope') == 'full_channel' %}
-                                            🔄 Full Channel Sync
-                                        {% elif subscription.get('sync_scope') == 'playlist' %}
-                                            📋 Playlist Sync
+                                    <!-- Subscription behavior based on type -->
+                                    <span class="subscription-behavior {{ subscription.type }}">
+                                        {% if subscription.type == 'video' %}
+                                            🎯 Single Video
+                                        {% elif subscription.type == 'channel' %}
+                                            🔄 Full Channel
+                                        {% elif subscription.type == 'playlist' %}
+                                            📋 Playlist
                                         {% else %}
-                                            {{ subscription.get('sync_scope', 'single_video')|title }}
+                                            {{ subscription.type|title }}
                                         {% endif %}
                                     </span>
 
@@ -62,26 +62,6 @@
                             </div>
 
                             <div class="subscription-actions">
-                                {% if subscription.get('sync_scope') == 'single_video' and subscription.type == 'video' %}
-                                    <button
-                                        class="btn btn-secondary btn-small"
-                                        hx-post="/upgrade-scope/{{ subscription.url | urlencode }}"
-                                        hx-target="#subscriptions-container"
-                                        hx-swap="innerHTML"
-                                        title="Upgrade to download full channel">
-                                        ⬆️ Full Channel
-                                    </button>
-                                {% elif subscription.get('sync_scope') == 'full_channel' %}
-                                    <button
-                                        class="btn btn-secondary btn-small"
-                                        hx-post="/downgrade-scope/{{ subscription.url | urlencode }}"
-                                        hx-target="#subscriptions-container"
-                                        hx-swap="innerHTML"
-                                        title="Downgrade to single video only">
-                                        ⬇️ Single Video
-                                    </button>
-                                {% endif %}
-
                                 <button
                                     class="btn btn-primary btn-small"
                                     hx-post="/update/{{ subscription.url | urlencode }}"

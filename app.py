@@ -70,32 +70,6 @@ def remove_subscription_route(item):
     return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 
-@app.route("/upgrade-scope/<path:url>", methods=["POST"])
-def upgrade_scope_route(url):
-    """Upgrade subscription from single video to full channel."""
-    decoded_url = unquote(url)
-    subscription = get_subscription_by_url(decoded_url)
-    if subscription:
-        subscription["sync_scope"] = "full_channel"
-        update_subscription(subscription)
-
-    subscriptions = get_all_subscriptions()
-    return render_template("_subscription_list.html", subscriptions=subscriptions)
-
-
-@app.route("/downgrade-scope/<path:url>", methods=["POST"])
-def downgrade_scope_route(url):
-    """Downgrade subscription from full channel to single video."""
-    decoded_url = unquote(url)
-    subscription = get_subscription_by_url(decoded_url)
-    if subscription:
-        subscription["sync_scope"] = "single_video"
-        update_subscription(subscription)
-
-    subscriptions = get_all_subscriptions()
-    return render_template("_subscription_list.html", subscriptions=subscriptions)
-
-
 @app.route("/set-parameters", methods=["POST"])
 def set_parameters_route():
     new_params = request.form.get("parameters", "")

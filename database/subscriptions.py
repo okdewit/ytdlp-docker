@@ -10,7 +10,6 @@ class Subscription(db.Entity):
     id = PrimaryKey(int, auto=True)
     url = Required(str, unique=True)
     subscription_type = Optional(str, column='type')  # video, playlist, or channel
-    sync_scope = Optional(str, default='single_video')  # single_video, full_channel, playlist
     created_at = Required(datetime, default=lambda: datetime.now())
     updated_at = Required(datetime, default=lambda: datetime.now())
 
@@ -23,7 +22,6 @@ def _subscription_to_dict(subscription):
     return {
         "url": subscription.url,
         "type": subscription.subscription_type or "",
-        "sync_scope": subscription.sync_scope or "single_video",
         "channel": subscription.channel.name if subscription.channel else "",
         "channel_id": subscription.channel.channel_id if subscription.channel else ""
     }
@@ -32,7 +30,8 @@ def _subscription_to_dict(subscription):
 @db_session
 def get_all_subscriptions():
     """Get all subscriptions from database."""
-    return [_subscription_to_dict(subscription) for subscription in select(s for s in Subscription).order_by(desc(Subscription.created_at))]
+    return [_subscription_to_dict(subscription) for subscription in
+            select(s for s in Subscription).order_by(desc(Subscription.created_at))]
 
 
 @db_session
@@ -48,7 +47,6 @@ def add_subscription(subscription_data):
         Subscription(
             url=subscription_data["url"],
             subscription_type=subscription_data.get("type", ""),
-            sync_scope=subscription_data.get("sync_scope", "single_video"),
             channel=channel
         )
         return True
@@ -87,7 +85,6 @@ def update_subscription(subscription_data):
         subscription = Subscription.get(url=subscription_data["url"])
         if subscription:
             subscription.subscription_type = subscription_data.get("type", subscription.subscription_type)
-            subscription.sync_scope = subscription_data.get("sync_scope", subscription.sync_scope)
             subscription.updated_at = datetime.now()
 
             # Update channel relationship if provided

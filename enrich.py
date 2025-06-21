@@ -61,21 +61,9 @@ def determine_subscription_type(extractor):
         return "unknown"
 
 
-def determine_sync_scope(subscription_type, extractor):
-    """Determine the default sync scope based on subscription type."""
-    if subscription_type == "video":
-        return "single_video"
-    elif subscription_type == "playlist":
-        return "playlist"
-    elif subscription_type == "channel":
-        return "full_channel"
-    else:
-        return "single_video"
-
-
 def enrich_subscription(subscription):
     """
-    Enrich a subscription dict by determining type, sync scope, and adding channel info.
+    Enrich a subscription dict by determining type and adding channel info.
     Returns True if enrichment succeeded, False otherwise.
     """
     url = subscription["url"]
@@ -95,35 +83,36 @@ def enrich_subscription(subscription):
         logger.error(f"Could not determine type for {url}")
         return False
 
-    # Determine sync scope if not already set
-    if "sync_scope" not in subscription:
-        subscription["sync_scope"] = determine_sync_scope(subscription_type, info.get("extractor"))
-
     channel_name = info.get("channel", "Unknown Channel")
     channel_id = info.get("channel_id", "")
 
     subscription["channel"] = channel_name
     subscription["channel_id"] = channel_id
-    logger.info(f'Enriched subscription {url} with channel: {channel_name} ({channel_id}) - scope: {subscription["sync_scope"]}')
+    logger.info(f'Enriched subscription {url} with channel: {channel_name} ({channel_id}) - type: {subscription_type}')
 
     # Add/update channel in database
     if channel_id:
         add_channel(channel_id, channel_name)
 
-    # If it's a video, also add it to the videos table
+    # If it's a video, add it to the videos table
     if subscription_type == "video":
         video_id = info.get("video_id", "")
         title = info.get("title", "Unknown Title")
         expected_filename = info.get("expected_filename", "")
 
-        # Add video to database
         if video_id:
             add_video(video_id, title, channel_id, expected_filename)
             logger.info(f'Added video to database: {title} ({video_id})')
 
-    elif subscription_type in ["playlist", "channel"]:
-        # For playlists and channels, we could populate videos later
-        logger.info(f'Identified {subscription_type}: {channel_name}')
+    # If it's a channel, populate all videos from the channel
+    elif subscription_type == "channel":
+        logger.info(f'Channel subscription detected, populating videos for: {channel_name}')
+        if channel_id:
+            populate_videos_from_channel(channel_id)
+
+    # If it's a playlist, we could populate videos later if needed
+    elif subscription_type == "playlist":
+        logger.info(f'Playlist subscription detected: {channel_name}')
 
     return True
 
