@@ -1,9 +1,8 @@
 # enrich.py - Simple version
 import subprocess
 import json
-import re
 from util import logger
-import database
+from database import add_channel, get_channel_by_id, add_video
 
 
 def get_ytdlp_info(url):
@@ -83,9 +82,6 @@ def determine_item_type(url):
         return "unknown"
 
 
-
-
-
 def enrich_item(item):
     """
     Enrich an item dict by determining type and adding channel info.
@@ -116,7 +112,7 @@ def enrich_item(item):
 
     # Add/update channel in database
     if channel_id:
-        database.add_channel(channel_id, channel_name)
+        add_channel(channel_id, channel_name)
 
     # If it's a video, also add it to the videos table
     if item_type == "video":
@@ -126,7 +122,7 @@ def enrich_item(item):
 
         # Add video to database
         if video_id:
-            database.add_video(video_id, title, channel_id, expected_filename)
+            add_video(video_id, title, channel_id, expected_filename)
             logger.info(f'Added video to database: {title} ({video_id})')
 
     elif item_type in ["playlist", "channel"]:
@@ -141,7 +137,7 @@ def populate_videos_from_channel(channel_id):
     Populate the videos table with all videos from a channel.
     This can be run separately to discover all videos in a channel.
     """
-    channel = database.get_channel_by_id(channel_id)
+    channel = get_channel_by_id(channel_id)
     if not channel:
         logger.error(f"Channel not found: {channel_id}")
         return False
@@ -167,7 +163,7 @@ def populate_videos_from_channel(channel_id):
                 expected_filename = lines[i + 2].strip()
 
                 if video_id and title:
-                    database.add_video(video_id, title, channel_id, expected_filename)
+                    add_video(video_id, title, channel_id, expected_filename)
 
         logger.info(f'Populated videos for channel: {channel["name"]}')
         return True
