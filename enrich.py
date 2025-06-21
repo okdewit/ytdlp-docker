@@ -1,6 +1,5 @@
-# enrich.py - Simple version
+# enrich.py - Simplified version
 import subprocess
-import json
 from util import logger
 from database import add_channel, get_channel_by_id, add_video
 
@@ -9,7 +8,7 @@ def get_ytdlp_info(url):
     """Get all needed info from yt-dlp in a single call."""
     try:
         # Get all the info we need in one call using newlines as separators
-        format_str = "%(channel)s\n%(channel_id)s\n%(channel_url)s\n%(id)s\n%(title)s\n%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s"
+        format_str = "%(extractor)s\n%(channel)s\n%(channel_id)s\n%(channel_url)s\n%(id)s\n%(title)s\n%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s"
 
         result = subprocess.run(
             ["./yt-dlp", "--print", format_str, url],
@@ -20,17 +19,18 @@ def get_ytdlp_info(url):
         )
 
         lines = result.stdout.strip().split('\n')
-        if len(lines) < 6:
+        if len(lines) < 7:
             logger.error(f"Unexpected output format from yt-dlp for {url}")
             return None
 
         return {
-            "channel": lines[0],
-            "channel_id": lines[1],
-            "channel_url": lines[2],
-            "video_id": lines[3],
-            "title": lines[4],
-            "expected_filename": lines[5]
+            "extractor": lines[0],
+            "channel": lines[1],
+            "channel_id": lines[2],
+            "channel_url": lines[3],
+            "video_id": lines[4],
+            "title": lines[5],
+            "expected_filename": lines[6]
         }
 
     except subprocess.TimeoutExpired:
@@ -44,35 +44,14 @@ def get_ytdlp_info(url):
         return None
 
 
-def get_ytdlp_metadata(url):
-    """Get basic metadata using JSON output to determine type."""
-    try:
-        result = subprocess.run(
-            ["./yt-dlp", "--flat-playlist", "-J", url],
-            capture_output=True,
-            text=True,
-            check=True,
-            timeout=30
-        )
-
-        return json.loads(result.stdout)
-    except Exception as e:
-        logger.error(f"Error getting metadata for {url}: {e}")
-        return None
-
-
-def determine_item_type(url):
-    """Determine if URL is a video, playlist, or channel."""
-    metadata = get_ytdlp_metadata(url)
-    if not metadata:
+def determine_item_type(extractor):
+    """Determine if URL is a video, playlist, or channel based on extractor."""
+    if not extractor:
         return "unknown"
 
-    _type = metadata.get("_type")
-    extractor = metadata.get("extractor")
+    logger.info(f'Found extractor: {extractor}')
 
-    logger.info(f'Found type: {_type}, extractor: {extractor} for {url}')
-
-    if not _type or _type == 'video':
+    if extractor == "youtube":
         return "video"
     elif extractor == "youtube:playlist":
         return "playlist"
@@ -90,18 +69,18 @@ def enrich_item(item):
     url = item["url"]
     logger.info(f'Starting enrichment for item: {url}')
 
-    # First determine what type of item this is
-    item_type = determine_item_type(url)
-    item["type"] = item_type
-
-    if item_type == "unknown":
-        logger.error(f"Could not determine type for {url}")
-        return False
-
     # Get all info in a single call
     info = get_ytdlp_info(url)
     if not info:
         logger.error(f"Could not get info for {url}")
+        return False
+
+    # Determine item type from extractor
+    item_type = determine_item_type(info.get("extractor"))
+    item["type"] = item_type
+
+    if item_type == "unknown":
+        logger.error(f"Could not determine type for {url}")
         return False
 
     channel_name = info.get("channel", "Unknown Channel")
