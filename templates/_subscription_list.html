@@ -27,28 +27,37 @@
                     {% for subscription in channel_data.subscriptions %}
                         <div class="subscription-item">
                             <div class="subscription-info">
-                                <div class="subscription-type">
+                                <div class="subscription-title">
                                     {% if subscription.type == 'video' %}
-                                        🎥 Single Video
+                                        🎥 Video: <span class="url-path">{{ subscription.url.split('/')[-1] if '/' in subscription.url else subscription.url }}</span>
                                     {% elif subscription.type == 'playlist' %}
-                                        📋 Playlist
+                                        📋 Playlist: <span class="url-path">{{ subscription.url.split('/')[-1] if '/' in subscription.url else subscription.url }}</span>
                                     {% elif subscription.type == 'channel' %}
-                                        📺 Channel
+                                        📺 Channel: <span class="url-path">{{ subscription.url.split('/')[-1] if '/' in subscription.url else subscription.url }}</span>
                                     {% else %}
-                                        📄 {{ subscription.type|title }}
+                                        📄 {{ subscription.type|title }}: <span class="url-path">{{ subscription.url }}</span>
                                     {% endif %}
                                 </div>
                                 <div class="subscription-url">{{ subscription.url }}</div>
-                                <div class="subscription-scope {{ subscription.get('sync_scope', 'single_video') }}">
-                                    {% if subscription.get('sync_scope') == 'single_video' %}
-                                        📹 Single Video Only
-                                    {% elif subscription.get('sync_scope') == 'full_channel' %}
-                                        📺 Full Channel Sync
-                                    {% elif subscription.get('sync_scope') == 'playlist' %}
-                                        📋 Playlist Sync
-                                    {% else %}
-                                        {{ subscription.get('sync_scope', 'single_video')|title }}
-                                    {% endif %}
+
+                                <div class="subscription-status">
+                                    <!-- Download Scope -->
+                                    <span class="sync-scope {{ subscription.get('sync_scope', 'single_video') }}">
+                                        {% if subscription.get('sync_scope') == 'single_video' %}
+                                            🎯 Single Video Only
+                                        {% elif subscription.get('sync_scope') == 'full_channel' %}
+                                            🔄 Full Channel Sync
+                                        {% elif subscription.get('sync_scope') == 'playlist' %}
+                                            📋 Playlist Sync
+                                        {% else %}
+                                            {{ subscription.get('sync_scope', 'single_video')|title }}
+                                        {% endif %}
+                                    </span>
+
+                                    <!-- Download Status (placeholder for now) -->
+                                    <span class="download-status pending">
+                                        ⏳ Not Downloaded
+                                    </span>
                                 </div>
                             </div>
 

@@ -1,0 +1,9 @@
+data/
+config/app.db
+*.pyc
+__pycache__/
+.git/
+.gitignore
+README.md
+.DS_Store
+*.log
