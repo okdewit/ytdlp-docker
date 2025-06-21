@@ -2,7 +2,7 @@
 import subprocess
 import json
 from util import logger
-from database import add_channel, get_channel_by_id, add_video
+from database import add_channel, get_channel_by_id, add_video, video_exists
 
 
 def get_ytdlp_info(url):
@@ -106,14 +106,25 @@ def enrich_subscription(subscription):
     if subscription_type == "video":
         video_id = data.get("id", "")
         title = data.get("title", "Unknown Title")
-        # Build expected filename
-        uploader = data.get("uploader", "Unknown")
+
+        # Get uploader with better fallback handling
+        uploader = data.get("uploader", channel_name)
+        if not uploader or uploader == "None":
+            uploader = "Unknown"
+
+        # Clean uploader name to be filesystem-safe
+        uploader = uploader.replace("/", "-").replace("\\", "-").strip()
+
         upload_date = data.get("upload_date", "")
         if upload_date and len(upload_date) >= 8:
             formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
         else:
             formatted_date = "Unknown-Date"
-        expected_filename = f"{uploader}/{formatted_date} - {title} [{video_id}].mp4"
+
+        # Clean title to be filesystem-safe
+        clean_title = title.replace("/", "-").replace("\\", "-").strip()
+
+        expected_filename = f"{uploader}/{formatted_date} - {clean_title} [{video_id}].mp4"
 
         if video_id:
             add_video(video_id, title, channel_id, expected_filename)
@@ -132,18 +143,22 @@ def enrich_subscription(subscription):
     return True
 
 
-def populate_videos_from_channel(channel_id):
+def populate_videos_from_channel(channel_id, limit=50):
     """
     Populate the videos table with all videos from a channel.
     This can be run separately to discover all videos in a channel.
+
+    Args:
+        channel_id: The YouTube channel ID
+        limit: Maximum number of videos to process (to avoid timeouts)
     """
     channel = get_channel_by_id(channel_id)
     if not channel:
         logger.error(f"Channel not found: {channel_id}")
         return False
 
-    # Use yt-dlp to get video info from the channel
     try:
+        # First, get the list of videos using flat-playlist
         result = subprocess.run([
             "./yt-dlp",
             "--flat-playlist",
@@ -154,20 +169,62 @@ def populate_videos_from_channel(channel_id):
         data = json.loads(result.stdout)
         entries = data.get("entries", [])
 
-        for entry in entries:
+        # Limit the number of videos to process
+        entries = entries[:limit]
+
+        logger.info(f"Processing {len(entries)} videos for channel: {channel['name']}")
+
+        for i, entry in enumerate(entries):
             video_id = entry.get("id", "")
-            title = entry.get("title", "Unknown Title")
-            uploader = entry.get("uploader", channel["name"])
-            upload_date = entry.get("upload_date", "")
+            if not video_id:
+                continue
 
-            if upload_date and len(upload_date) >= 8:
-                formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
-            else:
-                formatted_date = "Unknown-Date"
+            # Check if video already exists
+            if video_exists(video_id):
+                continue
 
-            expected_filename = f"{uploader}/{formatted_date} - {title} [{video_id}].mp4"
+            logger.info(f"Getting detailed info for video {i + 1}/{len(entries)}: {video_id}")
 
-            if video_id and title:
+            # Get detailed info for each video to get upload_date
+            try:
+                video_result = subprocess.run([
+                    "./yt-dlp",
+                    "-J",
+                    f"https://www.youtube.com/watch?v={video_id}"
+                ], capture_output=True, text=True, check=True, timeout=30)
+
+                video_data = json.loads(video_result.stdout)
+
+                title = video_data.get("title", "Unknown Title")
+                uploader = video_data.get("uploader", channel["name"])
+                upload_date = video_data.get("upload_date", "")
+
+                # Clean uploader name
+                if not uploader or uploader == "None":
+                    uploader = channel["name"] if channel["name"] else "Unknown"
+                uploader = uploader.replace("/", "-").replace("\\", "-").strip()
+
+                # Format date
+                if upload_date and len(upload_date) >= 8:
+                    formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
+                else:
+                    formatted_date = "Unknown-Date"
+
+                # Clean title
+                clean_title = title.replace("/", "-").replace("\\", "-").strip()
+
+                expected_filename = f"{uploader}/{formatted_date} - {clean_title} [{video_id}].mp4"
+
+                add_video(video_id, title, channel_id, expected_filename)
+
+            except Exception as e:
+                logger.warning(f"Failed to get detailed info for video {video_id}: {e}")
+                # Fallback to basic info from flat playlist
+                title = entry.get("title", "Unknown Title")
+                uploader = channel["name"] if channel["name"] else "Unknown"
+                uploader = uploader.replace("/", "-").replace("\\", "-").strip()
+                clean_title = title.replace("/", "-").replace("\\", "-").strip()
+                expected_filename = f"{uploader}/Unknown-Date - {clean_title} [{video_id}].mp4"
                 add_video(video_id, title, channel_id, expected_filename)
 
         logger.info(f'Populated {len(entries)} videos for channel: {channel["name"]}')
