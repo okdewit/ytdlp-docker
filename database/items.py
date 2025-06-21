@@ -1,19 +1,15 @@
 from datetime import datetime
-from pony.orm import PrimaryKey, Required, Optional, db_session, desc, select
+from pony.orm import *
 from database.base import db
 from util import logger
 
 
 class Item(db.Entity):
-    """Item entity representing a video, playlist, or channel."""
+    """Item entity representing a video, playlist, or channel URL."""
     _table_ = 'items'
     id = PrimaryKey(int, auto=True)
     url = Required(str, unique=True)
-    title = Optional(str)
-    description = Optional(str)
-    duration = Optional(str)
-    channel = Optional(str)
-    item_type = Optional(str, column='type')
+    item_type = Optional(str, column='type')  # video, playlist, or channel
     created_at = Required(datetime, default=lambda: datetime.now())
     updated_at = Required(datetime, default=lambda: datetime.now())
 
@@ -22,10 +18,6 @@ def _item_to_dict(item):
     """Convert an Item entity to a dictionary."""
     return {
         "url": item.url,
-        "title": item.title or "",
-        "description": item.description or "",
-        "duration": item.duration or "",
-        "channel": item.channel or "",
         "type": item.item_type or ""
     }
 
@@ -42,10 +34,6 @@ def add_item(item_data):
     try:
         Item(
             url=item_data["url"],
-            title=item_data.get("title", ""),
-            description=item_data.get("description", ""),
-            duration=item_data.get("duration", ""),
-            channel=item_data.get("channel", ""),
             item_type=item_data.get("type", "")
         )
         return True
@@ -83,11 +71,7 @@ def update_item(item_data):
     try:
         item = Item.get(url=item_data["url"])
         if item:
-            item.title = item_data.get("title", "")
-            item.description = item_data.get("description", "")
-            item.duration = item_data.get("duration", "")
-            item.channel = item_data.get("channel", "")
-            item.item_type = item_data.get("type", "")
+            item.item_type = item_data.get("type", item.item_type)
             item.updated_at = datetime.now()
             return True
         return False

@@ -57,17 +57,7 @@ def _migrate_database_schema():
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         existing_tables = [row[0] for row in cursor.fetchall()]
 
-        # Migration 1: Add 'type' column to items table if it doesn't exist
-        if 'items' in existing_tables:
-            cursor.execute("PRAGMA table_info(items)")
-            columns = [row[1] for row in cursor.fetchall()]
-
-            if 'type' not in columns:
-                logger.info("Adding 'type' column to items table")
-                cursor.execute("ALTER TABLE items ADD COLUMN type TEXT")
-                conn.commit()
-
-        # Migration 2: Create channels table if it doesn't exist
+        # Create channels table if it doesn't exist
         if 'channels' not in existing_tables:
             logger.info("Creating channels table")
             cursor.execute('''
@@ -80,7 +70,7 @@ def _migrate_database_schema():
             ''')
             conn.commit()
 
-        # Migration 3: Create videos table if it doesn't exist
+        # Create videos table if it doesn't exist
         if 'videos' not in existing_tables:
             logger.info("Creating videos table")
             cursor.execute('''
