@@ -14,48 +14,95 @@ DATABASE_PATH = os.path.join(BASE_DIR, "config", "app.db")
 def init_database():
     """Initialize the database and create tables."""
     logger.info(f"Initializing database at: {DATABASE_PATH}")
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"Base directory: {BASE_DIR}")
 
     # Ensure config directory exists
     config_dir = os.path.dirname(DATABASE_PATH)
-    logger.info(f"Config directory: {config_dir}")
     os.makedirs(config_dir, exist_ok=True)
+
+    # Check if database file exists
+    database_exists = os.path.exists(DATABASE_PATH)
+
+    # If database doesn't exist, create an empty file for Pony ORM
+    if not database_exists:
+        logger.info("Creating new database file...")
+        # Touch the file to create it
+        with open(DATABASE_PATH, 'a'):
+            pass
 
     # Bind database
     db.bind('sqlite', DATABASE_PATH)
 
-    # Import entities to register them with the database
-    # This must be done after binding but before generate_mapping
+    # Import all entities to register them with the database
     from database.items import Item
     from database.config import Config
+    from database.channels import Channel
+    from database.videos import Video
 
-    # Check if database file exists
-    if os.path.exists(DATABASE_PATH):
-        logger.info("Existing database found, checking schema compatibility...")
-
-        # For existing database, check if the type column exists
-        # and add it if it doesn't, before generating mapping
-        conn = sqlite3.connect(DATABASE_PATH)
-        cursor = conn.cursor()
-
-        # Check if type column exists in items table
-        cursor.execute("PRAGMA table_info(items)")
-        columns = [row[1] for row in cursor.fetchall()]
-
-        if 'type' not in columns:
-            logger.info("Adding 'type' column to items table")
-            cursor.execute("ALTER TABLE items ADD COLUMN type TEXT")
-            conn.commit()
-
-        conn.close()
-
-        # Now we can safely generate mapping
+    if database_exists:
+        logger.info("Existing database found, checking schema...")
+        _migrate_database_schema()
         db.generate_mapping(create_tables=False)
     else:
-        # New database
-        logger.info("Creating new database...")
+        logger.info("Creating new database tables...")
         db.generate_mapping(create_tables=True)
+
+
+def _migrate_database_schema():
+    """Handle simple database schema migrations."""
+    conn = sqlite3.connect(DATABASE_PATH)
+    cursor = conn.cursor()
+
+    try:
+        # Get list of existing tables
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+        existing_tables = [row[0] for row in cursor.fetchall()]
+
+        # Migration 1: Add 'type' column to items table if it doesn't exist
+        if 'items' in existing_tables:
+            cursor.execute("PRAGMA table_info(items)")
+            columns = [row[1] for row in cursor.fetchall()]
+
+            if 'type' not in columns:
+                logger.info("Adding 'type' column to items table")
+                cursor.execute("ALTER TABLE items ADD COLUMN type TEXT")
+                conn.commit()
+
+        # Migration 2: Create channels table if it doesn't exist
+        if 'channels' not in existing_tables:
+            logger.info("Creating channels table")
+            cursor.execute('''
+                CREATE TABLE channels (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    channel_id TEXT NOT NULL UNIQUE,
+                    name TEXT NOT NULL,
+                    created_at TIMESTAMP NOT NULL
+                )
+            ''')
+            conn.commit()
+
+        # Migration 3: Create videos table if it doesn't exist
+        if 'videos' not in existing_tables:
+            logger.info("Creating videos table")
+            cursor.execute('''
+                CREATE TABLE videos (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    video_id TEXT NOT NULL UNIQUE,
+                    title TEXT NOT NULL,
+                    expected_filename TEXT,
+                    created_at TIMESTAMP NOT NULL,
+                    channel INTEGER REFERENCES channels(id)
+                )
+            ''')
+            conn.commit()
+
+        logger.info("Database schema migrations completed")
+
+    except Exception as e:
+        logger.error(f"Error during database migration: {e}")
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
 
 
 def get_db():
