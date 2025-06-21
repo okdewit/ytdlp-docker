@@ -4,26 +4,37 @@
             <li class="channel-group">
                 <div class="channel-header">
                     <div class="channel-info">
-                        <div class="channel-meta">
-                            <strong>{{ subscription.get('channel', 'Unknown Channel') }}</strong>
-                            {% if subscription.get('channel_id') %}• {{ subscription.channel_id }}{% endif %}
+                        <div class="channel-avatar-section">
+                            {% set clean_channel = subscription.get('channel', 'Unknown').replace('/', '-').replace('\\', '-') %}
+                            {% set poster_path = '/static/data/' + clean_channel + '/poster.jpg' %}
+                            <img src="{{ poster_path }}"
+                                 alt="{{ subscription.get('channel', 'Unknown Channel') }}"
+                                 class="channel-avatar"
+                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                         </div>
 
-                        <div class="subscription-url">{{ subscription.url }}</div>
+                        <div class="channel-details">
+                            <div class="channel-meta">
+                                <strong>{{ subscription.get('channel', 'Unknown Channel') }}</strong>
+                                {% if subscription.get('channel_id') %}• {{ subscription.channel_id }}{% endif %}
+                            </div>
 
-                        <div class="subscription-status">
-                            <!-- Subscription behavior based on type -->
-                            <span class="subscription-behavior {{ subscription.type }}">
-                                {% if subscription.type == 'video' %}
-                                    🎯 Single Video
-                                {% elif subscription.type == 'channel' %}
-                                    🔄 Full Channel
-                                {% elif subscription.type == 'playlist' %}
-                                    📋 Playlist
-                                {% else %}
-                                    {{ subscription.type|title }}
-                                {% endif %}
-                            </span>
+                            <div class="subscription-url">{{ subscription.url }}</div>
+
+                            <div class="subscription-status">
+                                <!-- Subscription behavior based on type -->
+                                <span class="subscription-behavior {{ subscription.type }}">
+                                    {% if subscription.type == 'video' %}
+                                        🎯 Single Video
+                                    {% elif subscription.type == 'channel' %}
+                                        🔄 Full Channel
+                                    {% elif subscription.type == 'playlist' %}
+                                        📋 Playlist
+                                    {% else %}
+                                        {{ subscription.type|title }}
+                                    {% endif %}
+                                </span>
+                            </div>
                         </div>
                     </div>
 

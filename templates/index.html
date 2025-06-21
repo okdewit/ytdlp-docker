@@ -294,6 +294,125 @@
             padding: 2em;
             color: #666;
         }
+
+                .channel-info {
+            flex: 1;
+            display: flex;
+            align-items: flex-start;
+            gap: 1em;
+        }
+
+        .channel-avatar-section {
+            flex-shrink: 0;
+            position: relative;
+        }
+
+        .channel-avatar {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            object-fit: cover;
+            border: 2px solid #e9ecef;
+            background: #f8f9fa;
+            display: block;
+        }
+
+        .channel-avatar-fallback {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border: 2px solid #e9ecef;
+            flex-shrink: 0;
+        }
+
+        .channel-initials {
+            color: white;
+            font-weight: bold;
+            font-size: 1.2em;
+            text-transform: uppercase;
+        }
+
+        .channel-details {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5em;
+            min-width: 0; /* Allows text to wrap/truncate */
+        }
+
+        .channel-meta {
+            font-size: 1.3em;
+            color: #333;
+            font-weight: 500;
+        }
+
+        .subscription-url {
+            font-size: 0.85em;
+            color: #666;
+            font-family: monospace;
+            word-break: break-all;
+        }
+
+        .subscription-status {
+            display: flex;
+            gap: 0.75em;
+            flex-wrap: wrap;
+            margin-top: 0.5em;
+        }
+
+        .subscription-behavior {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 0.2em 0.6em;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+        }
+
+        .subscription-behavior.channel {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .subscription-behavior.playlist {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        /* Responsive adjustments for smaller screens */
+        @media (max-width: 768px) {
+            .channel-info {
+                flex-direction: column;
+                gap: 0.75em;
+            }
+
+            .channel-avatar-section {
+                align-self: flex-start;
+            }
+
+            .channel-avatar,
+            .channel-avatar-fallback {
+                width: 50px;
+                height: 50px;
+            }
+
+            .channel-initials {
+                font-size: 1em;
+            }
+
+            .channel-meta {
+                font-size: 1.1em;
+            }
+
+            .subscription-url {
+                font-size: 0.8em;
+            }
+        }
     </style>
 </head>
 <body>

@@ -1,6 +1,7 @@
-# enrich.py - Updated for subscriptions
+# enrich.py - Updated for subscriptions with local thumbnails
 import subprocess
 import json
+import os
 from util import logger
 from database import add_channel, get_channel_by_id, add_video, video_exists
 
@@ -30,6 +31,177 @@ def get_ytdlp_info(url):
         return None
     except Exception as e:
         logger.error(f"Unexpected error getting info for {url}: {e}")
+        return None
+
+
+def download_channel_thumbnail(channel_id, uploader_name):
+    """Download channel avatar using yt-dlp and save as poster.jpg."""
+    try:
+        # Clean uploader name for filesystem
+        clean_uploader = uploader_name.replace("/", "-").replace("\\", "-").strip()
+
+        # Create uploader directory if it doesn't exist
+        uploader_dir = os.path.join("data", clean_uploader)
+        os.makedirs(uploader_dir, exist_ok=True)
+
+        poster_path = os.path.join(uploader_dir, "poster.jpg")
+
+        # Check if poster already exists
+        if os.path.exists(poster_path):
+            logger.info(f"Poster already exists for {clean_uploader}")
+            return poster_path
+
+        # Method 1: Get channel info to extract avatar URL
+        logger.info(f"Getting channel avatar info for {clean_uploader}")
+        info_result = subprocess.run([
+            "./yt-dlp",
+            "-J",
+            "--flat-playlist",
+            "--playlist-items", "1",  # Only get info for first item
+            f"https://www.youtube.com/channel/{channel_id}"
+        ], capture_output=True, text=True, timeout=30)
+
+        if info_result.returncode == 0:
+            try:
+                channel_data = json.loads(info_result.stdout)
+
+                # Look for channel avatar in various fields
+                avatar_url = None
+
+                # Try avatar_uncropped first (best quality profile picture)
+                if channel_data.get("avatar_uncropped"):
+                    avatar_url = channel_data["avatar_uncropped"]
+                    logger.info(f"Found avatar_uncropped for {clean_uploader}")
+
+                # Try thumbnails array, but filter out banners
+                elif channel_data.get("thumbnails"):
+                    thumbnails = channel_data["thumbnails"]
+                    if thumbnails:
+                        # Filter out banner images (usually very wide) and look for square-ish avatars
+                        avatar_candidates = []
+                        for thumb in thumbnails:
+                            width = thumb.get("width", 0)
+                            height = thumb.get("height", 0)
+                            url = thumb.get("url", "")
+
+                            # Skip banner images (aspect ratio > 2:1 or contains banner indicators)
+                            if width > 0 and height > 0:
+                                aspect_ratio = width / height
+                                # Look for roughly square images (profile pics) and avoid banners
+                                if (0.8 <= aspect_ratio <= 1.25 and
+                                    "fcrop64" not in url and
+                                    "banner" not in url.lower()):
+                                    avatar_candidates.append(thumb)
+
+                        if avatar_candidates:
+                            # Get the highest resolution square avatar
+                            best_thumb = max(avatar_candidates, key=lambda x: (x.get("width", 0) * x.get("height", 0)))
+                            avatar_url = best_thumb.get("url")
+                            logger.info(f"Found square avatar thumbnail for {clean_uploader}")
+                        else:
+                            # Fallback to smallest thumbnail (likely to be avatar, not banner)
+                            smallest_thumb = min(thumbnails, key=lambda x: (x.get("width", 0) * x.get("height", 0)))
+                            avatar_url = smallest_thumb.get("url")
+                            logger.info(f"Using smallest thumbnail as avatar fallback for {clean_uploader}")
+
+                # Skip direct thumbnail field as it's often the banner
+
+                # If we found an avatar URL, download it using wget or curl
+                if avatar_url:
+                    logger.info(f"Downloading avatar from {avatar_url}")
+
+                    # Try using curl to download the image directly
+                    curl_result = subprocess.run([
+                        "curl", "-L", "-o", poster_path, avatar_url
+                    ], capture_output=True, text=True, timeout=30)
+
+                    if curl_result.returncode == 0 and os.path.exists(poster_path):
+                        logger.info(f"Downloaded avatar using curl for {clean_uploader}")
+                        return poster_path
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse channel data for {uploader_name}: {e}")
+
+        # Method 2: Try getting avatar from /about page
+        logger.info(f"Fallback: trying to get avatar from about page for {clean_uploader}")
+        about_result = subprocess.run([
+            "./yt-dlp",
+            "-J",
+            "--no-playlist",
+            f"https://www.youtube.com/channel/{channel_id}/about"
+        ], capture_output=True, text=True, timeout=30)
+
+        if about_result.returncode == 0:
+            try:
+                about_data = json.loads(about_result.stdout)
+                # Look specifically for avatar fields, not thumbnail (which might be banner)
+                avatar_url = about_data.get("avatar_uncropped")
+
+                if avatar_url:
+                    logger.info(f"Found avatar from about page: {avatar_url}")
+                    curl_result = subprocess.run([
+                        "curl", "-L", "-o", poster_path, avatar_url
+                    ], capture_output=True, text=True, timeout=30)
+
+                    if curl_result.returncode == 0 and os.path.exists(poster_path):
+                        logger.info(f"Downloaded avatar from about page for {clean_uploader}")
+                        return poster_path
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse about page data for {uploader_name}: {e}")
+
+        # Method 3: Try extracting avatar from a single video from the channel
+        logger.info(f"Final fallback: trying to extract avatar from channel videos for {clean_uploader}")
+        video_result = subprocess.run([
+            "./yt-dlp",
+            "-J",
+            "--playlist-items", "1",
+            f"https://www.youtube.com/channel/{channel_id}/videos"
+        ], capture_output=True, text=True, timeout=30)
+
+        if video_result.returncode == 0:
+            try:
+                video_data = json.loads(video_result.stdout)
+                entries = video_data.get("entries", [])
+
+                if entries:
+                    # Get detailed info for the first video to extract uploader avatar
+                    first_video = entries[0]
+                    video_id = first_video.get("id")
+
+                    if video_id:
+                        detailed_result = subprocess.run([
+                            "./yt-dlp",
+                            "-J",
+                            f"https://www.youtube.com/watch?v={video_id}"
+                        ], capture_output=True, text=True, timeout=30)
+
+                        if detailed_result.returncode == 0:
+                            detailed_data = json.loads(detailed_result.stdout)
+
+                            # Look for uploader avatar
+                            avatar_url = (detailed_data.get("uploader_avatar") or
+                                        detailed_data.get("channel_avatar") or
+                                        detailed_data.get("uploader_thumbnail"))
+
+                            if avatar_url:
+                                logger.info(f"Found uploader avatar from video: {avatar_url}")
+                                curl_result = subprocess.run([
+                                    "curl", "-L", "-o", poster_path, avatar_url
+                                ], capture_output=True, text=True, timeout=30)
+
+                                if curl_result.returncode == 0 and os.path.exists(poster_path):
+                                    logger.info(f"Downloaded uploader avatar for {clean_uploader}")
+                                    return poster_path
+
+            except json.JSONDecodeError as e:
+                logger.warning(f"Failed to parse video data for {uploader_name}: {e}")
+
+        logger.warning(f"All avatar download methods failed for {clean_uploader}")
+        return None
+
+    except Exception as e:
+        logger.error(f"Error downloading avatar for {uploader_name}: {e}")
         return None
 
 
@@ -102,6 +274,12 @@ def enrich_subscription(subscription):
     if channel_id:
         add_channel(channel_id, channel_name)
 
+        # Download channel thumbnail
+        if channel_name:
+            poster_path = download_channel_thumbnail(channel_id, channel_name)
+            if poster_path:
+                subscription["poster_path"] = poster_path
+
     # If it's a video, add it to the videos table
     if subscription_type == "video":
         video_id = data.get("id", "")
@@ -129,6 +307,10 @@ def enrich_subscription(subscription):
         if video_id:
             add_video(video_id, title, channel_id, expected_filename)
             logger.info(f'Added video to database: {title} ({video_id})')
+
+            # Also download thumbnail for single video's channel
+            if channel_id and channel_name:
+                download_channel_thumbnail(channel_id, channel_name)
 
     # If it's a channel, populate all videos from the channel
     elif subscription_type == "channel":

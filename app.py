@@ -1,6 +1,7 @@
-from flask import Flask, render_template, request
+from flask import Flask, render_template, request, send_from_directory
 from apscheduler.schedulers.background import BackgroundScheduler
 from urllib.parse import unquote
+import os
 from enrich import enrich_subscription
 from subscription_processing import process_subscription
 from util import logger
@@ -42,6 +43,13 @@ def subscriptions():
 def items():
     """Legacy route for backward compatibility."""
     return subscriptions()
+
+
+@app.route("/static/data/<path:filename>")
+def serve_data_files(filename):
+    """Serve files from the data directory."""
+    data_dir = os.path.join(os.getcwd(), "data")
+    return send_from_directory(data_dir, filename)
 
 
 @app.route("/add", methods=["POST"])
