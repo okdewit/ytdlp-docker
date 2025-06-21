@@ -13,7 +13,7 @@ else
     OR_TRUE := || true
 endif
 
-.PHONY: build run sh stop rm logs build-and-run br brl
+.PHONY: build run sh stop rm logs build-and-run br brl full
 
 build: rm
 	docker build -t $(IMAGE_NAME) .
@@ -44,3 +44,5 @@ logs:
 br: build run
 
 brl: build run logs
+
+full: clean build run logs

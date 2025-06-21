@@ -1,4 +1,4 @@
-# enrich.py - Simplified version
+# enrich.py - Updated for subscriptions
 import subprocess
 from util import logger
 from database import add_channel, get_channel_by_id, add_video
@@ -44,7 +44,7 @@ def get_ytdlp_info(url):
         return None
 
 
-def determine_item_type(extractor):
+def determine_subscription_type(extractor):
     """Determine if URL is a video, playlist, or channel based on extractor."""
     if not extractor:
         return "unknown"
@@ -61,13 +61,25 @@ def determine_item_type(extractor):
         return "unknown"
 
 
-def enrich_item(item):
+def determine_sync_scope(subscription_type, extractor):
+    """Determine the default sync scope based on subscription type."""
+    if subscription_type == "video":
+        return "single_video"
+    elif subscription_type == "playlist":
+        return "playlist"
+    elif subscription_type == "channel":
+        return "full_channel"
+    else:
+        return "single_video"
+
+
+def enrich_subscription(subscription):
     """
-    Enrich an item dict by determining type and adding channel info.
+    Enrich a subscription dict by determining type, sync scope, and adding channel info.
     Returns True if enrichment succeeded, False otherwise.
     """
-    url = item["url"]
-    logger.info(f'Starting enrichment for item: {url}')
+    url = subscription["url"]
+    logger.info(f'Starting enrichment for subscription: {url}')
 
     # Get all info in a single call
     info = get_ytdlp_info(url)
@@ -75,26 +87,31 @@ def enrich_item(item):
         logger.error(f"Could not get info for {url}")
         return False
 
-    # Determine item type from extractor
-    item_type = determine_item_type(info.get("extractor"))
-    item["type"] = item_type
+    # Determine subscription type from extractor
+    subscription_type = determine_subscription_type(info.get("extractor"))
+    subscription["type"] = subscription_type
 
-    if item_type == "unknown":
+    if subscription_type == "unknown":
         logger.error(f"Could not determine type for {url}")
         return False
+
+    # Determine sync scope if not already set
+    if "sync_scope" not in subscription:
+        subscription["sync_scope"] = determine_sync_scope(subscription_type, info.get("extractor"))
 
     channel_name = info.get("channel", "Unknown Channel")
     channel_id = info.get("channel_id", "")
 
-    item["channel"] = channel_name
-    logger.info(f'Enriched item {url} with channel: {channel_name} ({channel_id})')
+    subscription["channel"] = channel_name
+    subscription["channel_id"] = channel_id
+    logger.info(f'Enriched subscription {url} with channel: {channel_name} ({channel_id}) - scope: {subscription["sync_scope"]}')
 
     # Add/update channel in database
     if channel_id:
         add_channel(channel_id, channel_name)
 
     # If it's a video, also add it to the videos table
-    if item_type == "video":
+    if subscription_type == "video":
         video_id = info.get("video_id", "")
         title = info.get("title", "Unknown Title")
         expected_filename = info.get("expected_filename", "")
@@ -104,9 +121,9 @@ def enrich_item(item):
             add_video(video_id, title, channel_id, expected_filename)
             logger.info(f'Added video to database: {title} ({video_id})')
 
-    elif item_type in ["playlist", "channel"]:
+    elif subscription_type in ["playlist", "channel"]:
         # For playlists and channels, we could populate videos later
-        logger.info(f'Identified {item_type}: {channel_name}')
+        logger.info(f'Identified {subscription_type}: {channel_name}')
 
     return True
 

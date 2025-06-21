@@ -1,14 +1,14 @@
 from database.base import init_database as _init_database_base
 from database.config import init_default_config
 
-# Import legacy item functions
-from database.items import (
-    get_all_items,
-    add_item,
-    remove_item,
-    get_item_by_url,
-    update_item,
-    item_exists
+# Import subscription functions (renamed from items)
+from database.subscriptions import (
+    get_all_subscriptions,
+    add_subscription,
+    remove_subscription,
+    get_subscription_by_url,
+    update_subscription,
+    subscription_exists
 )
 
 # Import config functions
@@ -20,7 +20,7 @@ from database.config import (
     set_config_value
 )
 
-# Import new channel functions
+# Import channel functions
 from database.channels import (
     get_all_channels,
     add_channel,
@@ -28,7 +28,7 @@ from database.channels import (
     channel_exists
 )
 
-# Import new video functions
+# Import video functions
 from database.videos import (
     get_all_videos,
     get_videos_by_channel,

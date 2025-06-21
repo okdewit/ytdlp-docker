@@ -15,6 +15,7 @@ class Channel(db.Entity):
 
     # Relationships
     videos = Set('Video')
+    subscriptions = Set('Subscription')
 
 
 def _channel_to_dict(channel):
@@ -24,7 +25,8 @@ def _channel_to_dict(channel):
         "channel_id": channel.channel_id,
         "name": channel.name,
         "created_at": channel.created_at.isoformat(),
-        "video_count": len(channel.videos)
+        "video_count": len(channel.videos),
+        "subscription_count": len(channel.subscriptions)
     }
 
 

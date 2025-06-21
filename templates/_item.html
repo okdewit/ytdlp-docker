@@ -1,5 +1,5 @@
 <li id="item-{{ item['url'] | urlencode }}">
-  <span>{{ item['channel'] }} ({{ item['url'] }})</span>
+  <span>{{ item['channel'] }} ({{ item['url'] }}) - {{ item.get('sync_scope', 'single_video') }}</span>
   <div>
     <button
         hx-delete="/remove/{{ item['url'] | urlencode }}"

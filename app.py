@@ -1,12 +1,12 @@
 from flask import Flask, render_template, request
 from apscheduler.schedulers.background import BackgroundScheduler
 from urllib.parse import unquote
-from enrich import enrich_item
-from item_processing import process_item
+from enrich import enrich_subscription
+from subscription_processing import process_subscription
 from util import logger
 from database import (
-    get_config, get_all_items, get_item_by_url, add_item,
-    remove_item, get_parameters, set_parameters, update_item,
+    get_config, get_all_subscriptions, get_subscription_by_url, add_subscription,
+    remove_subscription, get_parameters, set_parameters, update_subscription,
     init_database
 )
 
@@ -16,53 +16,54 @@ scheduler.start()
 
 
 def scheduled_task():
-    """Background task that processes all items."""
+    """Background task that processes all subscriptions."""
     parameters = get_parameters()
-    items = get_all_items()
+    subscriptions = get_all_subscriptions()
 
-    for item in items:
-        process_item(item, parameters)
-        # Update the item in database after processing
-        update_item(item)
+    for subscription in subscriptions:
+        process_subscription(subscription, parameters)
+        # Update the subscription in database after processing
+        update_subscription(subscription)
 
 
 @app.route("/")
 def index():
     config = get_config()
-    items = get_all_items()
-    return render_template("index.html", config=config, items=items)
+    subscriptions = get_all_subscriptions()
+    return render_template("index.html", config=config, items=subscriptions)
 
 
 @app.route("/items")
 def items():
-    items = get_all_items()
-    return render_template("_item_list.html", items=items)
+    """Route for HTMX to load subscription list (keeping 'items' for template compatibility)."""
+    subscriptions = get_all_subscriptions()
+    return render_template("_item_list.html", items=subscriptions)
 
 
 @app.route("/add", methods=["POST"])
-def add_item_route():
-    item_url = request.form.get("item")
+def add_subscription_route():
+    subscription_url = request.form.get("item")  # Keep form field name for template compatibility
 
-    logger.info('adding item ' + item_url)
+    logger.info('adding subscription ' + subscription_url)
 
-    if item_url:
-        # Check if item already exists
-        existing_item = get_item_by_url(item_url)
-        if not existing_item:
-            new_item = {"url": item_url}
-            if enrich_item(new_item):
-                add_item(new_item)
+    if subscription_url:
+        # Check if subscription already exists
+        existing_subscription = get_subscription_by_url(subscription_url)
+        if not existing_subscription:
+            new_subscription = {"url": subscription_url}
+            if enrich_subscription(new_subscription):
+                add_subscription(new_subscription)
 
-    items = get_all_items()
-    return render_template("_item_list.html", items=items)
+    subscriptions = get_all_subscriptions()
+    return render_template("_item_list.html", items=subscriptions)
 
 
 @app.route("/remove/<path:item>", methods=["DELETE"])
-def remove_item_route(item):
+def remove_subscription_route(item):
     decoded_url = unquote(item)
-    remove_item(decoded_url)
-    items = get_all_items()
-    return render_template("_item_list.html", items=items)
+    remove_subscription(decoded_url)
+    subscriptions = get_all_subscriptions()
+    return render_template("_item_list.html", items=subscriptions)
 
 
 @app.route("/set-parameters", methods=["POST"])
@@ -73,18 +74,18 @@ def set_parameters_route():
 
 
 @app.route("/update/<path:url>", methods=["POST"])
-def update_item_route(url):
+def update_subscription_route(url):
     decoded_url = unquote(url)
-    item = get_item_by_url(decoded_url)
-    if not item:
-        return "Item not found", 404
+    subscription = get_subscription_by_url(decoded_url)
+    if not subscription:
+        return "Subscription not found", 404
 
     parameters = get_parameters()
-    process_item(item, parameters)
-    update_item(item)
+    process_subscription(subscription, parameters)
+    update_subscription(subscription)
 
-    items = get_all_items()
-    return render_template("_item_list.html", items=items)
+    subscriptions = get_all_subscriptions()
+    return render_template("_item_list.html", items=subscriptions)
 
 
 # Initialize database on startup

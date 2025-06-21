@@ -33,10 +33,10 @@ def init_database():
     db.bind('sqlite', DATABASE_PATH)
 
     # Import all entities to register them with the database
-    from database.items import Item
     from database.config import Config
     from database.channels import Channel
     from database.videos import Video
+    from database.subscriptions import Subscription
 
     if database_exists:
         logger.info("Existing database found, checking schema...")
@@ -56,6 +56,48 @@ def _migrate_database_schema():
         # Get list of existing tables
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
         existing_tables = [row[0] for row in cursor.fetchall()]
+
+        # Migrate items table to subscriptions table if needed
+        if 'items' in existing_tables and 'subscriptions' not in existing_tables:
+            logger.info("Migrating items table to subscriptions table")
+            cursor.execute('''
+                CREATE TABLE subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL UNIQUE,
+                    type TEXT,
+                    sync_scope TEXT DEFAULT 'single_video',
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    channel INTEGER REFERENCES channels(id)
+                )
+            ''')
+
+            # Copy data from items to subscriptions
+            cursor.execute('''
+                INSERT INTO subscriptions (url, type, created_at, updated_at)
+                SELECT url, type, created_at, updated_at FROM items
+            ''')
+
+            # Drop the old items table
+            cursor.execute('DROP TABLE items')
+            conn.commit()
+            logger.info("Migration from items to subscriptions completed")
+
+        # Create subscriptions table if it doesn't exist (for new installations)
+        elif 'subscriptions' not in existing_tables:
+            logger.info("Creating subscriptions table")
+            cursor.execute('''
+                CREATE TABLE subscriptions (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    url TEXT NOT NULL UNIQUE,
+                    type TEXT,
+                    sync_scope TEXT DEFAULT 'single_video',
+                    created_at TIMESTAMP NOT NULL,
+                    updated_at TIMESTAMP NOT NULL,
+                    channel INTEGER REFERENCES channels(id)
+                )
+            ''')
+            conn.commit()
 
         # Create channels table if it doesn't exist
         if 'channels' not in existing_tables:
@@ -83,6 +125,20 @@ def _migrate_database_schema():
                     channel INTEGER REFERENCES channels(id)
                 )
             ''')
+            conn.commit()
+
+        # Add sync_scope column to subscriptions if it doesn't exist
+        cursor.execute("PRAGMA table_info(subscriptions)")
+        columns = [column[1] for column in cursor.fetchall()]
+        if 'sync_scope' not in columns:
+            logger.info("Adding sync_scope column to subscriptions table")
+            cursor.execute('ALTER TABLE subscriptions ADD COLUMN sync_scope TEXT DEFAULT "single_video"')
+            conn.commit()
+
+        # Add channel column to subscriptions if it doesn't exist
+        if 'channel' not in columns:
+            logger.info("Adding channel foreign key to subscriptions table")
+            cursor.execute('ALTER TABLE subscriptions ADD COLUMN channel INTEGER REFERENCES channels(id)')
             conn.commit()
 
         logger.info("Database schema migrations completed")
