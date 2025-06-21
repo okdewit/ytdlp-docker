@@ -29,15 +29,19 @@ def scheduled_task():
 @app.route("/")
 def index():
     config = get_config()
-    subscriptions = get_all_subscriptions()
-    return render_template("index.html", config=config, items=subscriptions)
+    return render_template("index.html", config=config)
 
+
+@app.route("/subscriptions")
+def subscriptions():
+    """Route for HTMX to load subscription list."""
+    subscriptions = get_all_subscriptions()
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 @app.route("/items")
 def items():
-    """Route for HTMX to load subscription list (keeping 'items' for template compatibility)."""
-    subscriptions = get_all_subscriptions()
-    return render_template("_item_list.html", items=subscriptions)
+    """Legacy route for backward compatibility."""
+    return subscriptions()
 
 
 @app.route("/add", methods=["POST"])
@@ -55,7 +59,7 @@ def add_subscription_route():
                 add_subscription(new_subscription)
 
     subscriptions = get_all_subscriptions()
-    return render_template("_item_list.html", items=subscriptions)
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 
 @app.route("/remove/<path:item>", methods=["DELETE"])
@@ -63,7 +67,33 @@ def remove_subscription_route(item):
     decoded_url = unquote(item)
     remove_subscription(decoded_url)
     subscriptions = get_all_subscriptions()
-    return render_template("_item_list.html", items=subscriptions)
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
+
+
+@app.route("/upgrade-scope/<path:url>", methods=["POST"])
+def upgrade_scope_route(url):
+    """Upgrade subscription from single video to full channel."""
+    decoded_url = unquote(url)
+    subscription = get_subscription_by_url(decoded_url)
+    if subscription:
+        subscription["sync_scope"] = "full_channel"
+        update_subscription(subscription)
+
+    subscriptions = get_all_subscriptions()
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
+
+
+@app.route("/downgrade-scope/<path:url>", methods=["POST"])
+def downgrade_scope_route(url):
+    """Downgrade subscription from full channel to single video."""
+    decoded_url = unquote(url)
+    subscription = get_subscription_by_url(decoded_url)
+    if subscription:
+        subscription["sync_scope"] = "single_video"
+        update_subscription(subscription)
+
+    subscriptions = get_all_subscriptions()
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 
 @app.route("/set-parameters", methods=["POST"])
@@ -85,7 +115,7 @@ def update_subscription_route(url):
     update_subscription(subscription)
 
     subscriptions = get_all_subscriptions()
-    return render_template("_item_list.html", items=subscriptions)
+    return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 
 # Initialize database on startup

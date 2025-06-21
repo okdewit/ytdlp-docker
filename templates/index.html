@@ -5,38 +5,274 @@
     <title>YTDLP Subscription Manager</title>
     <script src="https://unpkg.com/htmx.org@1.9.5"></script>
     <style>
-        body { font-family: sans-serif; margin: 2em; }
-        form { margin-bottom: 1em; }
-        ul { padding-left: 0; list-style: none; }
-        li { display: flex; justify-content: space-between; margin: 0.5em 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            margin: 2em;
+            background: #f8f9fa;
+        }
+
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: white;
+            padding: 2em;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+
+        h1, h2 {
+            color: #333;
+            margin-bottom: 1em;
+        }
+
+        .parameters-section {
+            margin-bottom: 2em;
+            padding: 1.5em;
+            background: #f1f3f4;
+            border-radius: 6px;
+        }
+
+        .parameters-input {
+            width: 100%;
+            padding: 0.75em;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-family: monospace;
+            font-size: 0.9em;
+        }
+
+        .add-form {
+            margin-bottom: 2em;
+            padding: 1.5em;
+            background: #e8f5e8;
+            border-radius: 6px;
+            display: flex;
+            gap: 0.5em;
+        }
+
+        .add-input {
+            flex: 1;
+            padding: 0.75em;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 1em;
+        }
+
+        .btn {
+            padding: 0.75em 1.5em;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.9em;
+            font-weight: 500;
+            transition: all 0.2s;
+        }
+
+        .btn-primary {
+            background: #007bff;
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background: #0056b3;
+        }
+
+        .btn-secondary {
+            background: #6c757d;
+            color: white;
+        }
+
+        .btn-secondary:hover {
+            background: #545b62;
+        }
+
+        .btn-danger {
+            background: #dc3545;
+            color: white;
+        }
+
+        .btn-danger:hover {
+            background: #c82333;
+        }
+
+        .btn-small {
+            padding: 0.4em 0.8em;
+            font-size: 0.8em;
+        }
+
+        .subscriptions-list {
+            list-style: none;
+            padding: 0;
+        }
+
+        .channel-group {
+            margin-bottom: 1.5em;
+            border: 1px solid #e9ecef;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .channel-header {
+            background: #f8f9fa;
+            padding: 1em 1.5em;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            cursor: pointer;
+            border-bottom: 1px solid #e9ecef;
+            transition: background 0.2s;
+        }
+
+        .channel-header:hover {
+            background: #e9ecef;
+        }
+
+        .channel-info {
+            display: flex;
+            align-items: center;
+            gap: 1em;
+        }
+
+        .channel-name {
+            font-weight: 600;
+            color: #333;
+            font-size: 1.1em;
+        }
+
+        .channel-meta {
+            font-size: 0.9em;
+            color: #666;
+        }
+
+        .expand-icon {
+            font-size: 1.2em;
+            color: #666;
+            transition: transform 0.2s;
+        }
+
+        .channel-group.expanded .expand-icon {
+            transform: rotate(90deg);
+        }
+
+        .channel-actions {
+            display: flex;
+            gap: 0.5em;
+        }
+
+        .subscription-list {
+            display: none;
+            background: white;
+        }
+
+        .channel-group.expanded .subscription-list {
+            display: block;
+        }
+
+        .subscription-item {
+            padding: 1em 1.5em;
+            border-bottom: 1px solid #f1f3f4;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .subscription-item:last-child {
+            border-bottom: none;
+        }
+
+        .subscription-info {
+            flex: 1;
+        }
+
+        .subscription-url {
+            font-size: 0.9em;
+            color: #666;
+            font-family: monospace;
+            margin-top: 0.25em;
+        }
+
+        .subscription-scope {
+            display: inline-block;
+            background: #e3f2fd;
+            color: #1976d2;
+            padding: 0.2em 0.6em;
+            border-radius: 12px;
+            font-size: 0.8em;
+            font-weight: 500;
+            margin-top: 0.5em;
+        }
+
+        .subscription-scope.full_channel {
+            background: #e8f5e8;
+            color: #2e7d32;
+        }
+
+        .subscription-scope.playlist {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .subscription-actions {
+            display: flex;
+            gap: 0.5em;
+        }
+
+        .no-subscriptions {
+            text-align: center;
+            padding: 3em;
+            color: #666;
+            font-style: italic;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 2em;
+            color: #666;
+        }
     </style>
 </head>
 <body>
-<h2>Scheduled Task Parameters</h2>
+    <div class="container">
+        <h2>Scheduled Task Parameters</h2>
+        <div class="parameters-section">
+            <input
+                type="text"
+                name="parameters"
+                class="parameters-input"
+                value="{{ config.options.parameters if config.options.parameters else '' }}"
+                hx-post="/set-parameters"
+                hx-include="[name=parameters]"
+                hx-trigger="change"
+                hx-swap="none"
+                placeholder="yt-dlp parameters..."
+            />
+        </div>
 
-<input
-        type="text"
-        name="parameters"
-        value="{{ config.options.parameters if config.options.parameters else '' }}"
-        hx-post="/set-parameters"
-        hx-include="[name=parameters]"
-        hx-trigger="change"
-        hx-swap="none"
-/>
+        <h1>Subscriptions</h1>
 
-<h1>Subscriptions</h1>
+        <form
+            class="add-form"
+            hx-post="/add"
+            hx-target="#subscriptions-container"
+            hx-swap="innerHTML"
+        >
+            <input type="text" name="item" class="add-input" placeholder="Enter YouTube URL (video, playlist, or channel)" required>
+            <button type="submit" class="btn btn-primary">Add Subscription</button>
+        </form>
 
-<form
-    hx-post="/add"
-    hx-target="#item-list"
-    hx-swap="innerHTML"
->
-    <input type="text" name="item" placeholder="Add subscription URL" required>
-    <button type="submit">Add</button>
-</form>
+        <div id="subscriptions-container" hx-get="/subscriptions" hx-trigger="load">
+            <div class="loading">Loading subscriptions...</div>
+        </div>
+    </div>
 
-<ul id="item-list" hx-get="/items" hx-trigger="load">
-    <!-- Subscriptions will be loaded here dynamically -->
-</ul>
+    <script>
+        // Handle channel expansion
+        document.addEventListener('click', function(e) {
+            if (e.target.closest('.channel-header')) {
+                const channelGroup = e.target.closest('.channel-group');
+                channelGroup.classList.toggle('expanded');
+            }
+        });
+    </script>
 </body>
 </html>

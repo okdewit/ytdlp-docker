@@ -1,0 +1,106 @@
+{% set channels_dict = {} %}
+{% for subscription in subscriptions %}
+    {% set channel_name = subscription.get('channel', 'Unknown Channel') %}
+    {% set channel_id = subscription.get('channel_id', '') %}
+    {% if channel_name not in channels_dict %}
+        {% set _ = channels_dict.update({channel_name: {'id': channel_id, 'subscriptions': []}}) %}
+    {% endif %}
+    {% set _ = channels_dict[channel_name]['subscriptions'].append(subscription) %}
+{% endfor %}
+
+{% if channels_dict %}
+    <ul class="subscriptions-list">
+        {% for channel_name, channel_data in channels_dict.items() %}
+            <li class="channel-group">
+                <div class="channel-header">
+                    <div class="channel-info">
+                        <div class="channel-name">{{ channel_name }}</div>
+                        <div class="channel-meta">
+                            {{ channel_data.subscriptions|length }} subscription{{ 's' if channel_data.subscriptions|length != 1 else '' }}
+                            {% if channel_data.id %}• {{ channel_data.id }}{% endif %}
+                        </div>
+                    </div>
+                    <div class="expand-icon">▶</div>
+                </div>
+
+                <div class="subscription-list">
+                    {% for subscription in channel_data.subscriptions %}
+                        <div class="subscription-item">
+                            <div class="subscription-info">
+                                <div class="subscription-type">
+                                    {% if subscription.type == 'video' %}
+                                        🎥 Single Video
+                                    {% elif subscription.type == 'playlist' %}
+                                        📋 Playlist
+                                    {% elif subscription.type == 'channel' %}
+                                        📺 Channel
+                                    {% else %}
+                                        📄 {{ subscription.type|title }}
+                                    {% endif %}
+                                </div>
+                                <div class="subscription-url">{{ subscription.url }}</div>
+                                <div class="subscription-scope {{ subscription.get('sync_scope', 'single_video') }}">
+                                    {% if subscription.get('sync_scope') == 'single_video' %}
+                                        📹 Single Video Only
+                                    {% elif subscription.get('sync_scope') == 'full_channel' %}
+                                        📺 Full Channel Sync
+                                    {% elif subscription.get('sync_scope') == 'playlist' %}
+                                        📋 Playlist Sync
+                                    {% else %}
+                                        {{ subscription.get('sync_scope', 'single_video')|title }}
+                                    {% endif %}
+                                </div>
+                            </div>
+
+                            <div class="subscription-actions">
+                                {% if subscription.get('sync_scope') == 'single_video' and subscription.type == 'video' %}
+                                    <button
+                                        class="btn btn-secondary btn-small"
+                                        hx-post="/upgrade-scope/{{ subscription.url | urlencode }}"
+                                        hx-target="#subscriptions-container"
+                                        hx-swap="innerHTML"
+                                        title="Upgrade to download full channel">
+                                        ⬆️ Full Channel
+                                    </button>
+                                {% elif subscription.get('sync_scope') == 'full_channel' %}
+                                    <button
+                                        class="btn btn-secondary btn-small"
+                                        hx-post="/downgrade-scope/{{ subscription.url | urlencode }}"
+                                        hx-target="#subscriptions-container"
+                                        hx-swap="innerHTML"
+                                        title="Downgrade to single video only">
+                                        ⬇️ Single Video
+                                    </button>
+                                {% endif %}
+
+                                <button
+                                    class="btn btn-primary btn-small"
+                                    hx-post="/update/{{ subscription.url | urlencode }}"
+                                    hx-target="#subscriptions-container"
+                                    hx-swap="innerHTML"
+                                    title="Download now">
+                                    ▶️ Run Now
+                                </button>
+
+                                <button
+                                    class="btn btn-danger btn-small"
+                                    hx-delete="/remove/{{ subscription.url | urlencode }}"
+                                    hx-target="#subscriptions-container"
+                                    hx-swap="innerHTML"
+                                    hx-confirm="Are you sure you want to remove this subscription?"
+                                    title="Remove subscription">
+                                    🗑️ Remove
+                                </button>
+                            </div>
+                        </div>
+                    {% endfor %}
+                </div>
+            </li>
+        {% endfor %}
+    </ul>
+{% else %}
+    <div class="no-subscriptions">
+        <h3>No subscriptions yet</h3>
+        <p>Add your first YouTube URL above to get started!</p>
+    </div>
+{% endif %}
