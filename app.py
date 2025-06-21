@@ -91,6 +91,17 @@ def update_subscription_route(url):
     subscriptions = get_all_subscriptions()
     return render_template("_subscription_list.html", subscriptions=subscriptions)
 
+@app.route("/videos/<channel_id>")
+def get_videos_for_channel(channel_id):
+    """Route for HTMX to load videos for a specific channel."""
+    from database import get_videos_by_channel
+
+    if channel_id == "unknown" or not channel_id:
+        videos = []
+    else:
+        videos = get_videos_by_channel(channel_id)
+
+    return render_template("_video_list.html", videos=videos)
 
 # Initialize database on startup
 init_database()

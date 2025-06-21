@@ -1,0 +1,21 @@
+{% if videos %}
+    {% for video in videos %}
+        <div class="video-item">
+            <div class="video-info">
+                <div class="video-title">{{ video.title }}</div>
+                <div class="video-meta">
+                    ID: {{ video.video_id }} • 
+                    {% if video.channel_name %}Channel: {{ video.channel_name }} • {% endif %}
+                    Added: {{ video.created_at[:10] }}
+                </div>
+                {% if video.expected_filename %}
+                    <div class="video-filename">{{ video.expected_filename }}</div>
+                {% endif %}
+            </div>
+        </div>
+    {% endfor %}
+{% else %}
+    <div class="no-videos">
+        <p>No videos found for this channel.</p>
+    </div>
+{% endif %}
