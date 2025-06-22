@@ -3,7 +3,7 @@ import sys
 import os
 
 # Configuration for yt-dlp binary location
-YTDLP_BINARY = os.getenv('YTDLP_BINARY', '/app/yt-dlp')
+YTDLP_BINARY = os.getenv('YTDLP_BINARY', '/usr/local/bin/yt-dlp')
 
 # Configure root logger
 logging.basicConfig(

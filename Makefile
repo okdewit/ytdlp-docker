@@ -38,7 +38,7 @@ dev_: stop rm
 		-p $(PORT) \
 		-v "$(PWD)/data:/app/data" \
 		-v "$(PWD)/config:/app/config" \
-		-v "$(PWD)/src:/app/src" \
+		-v "$(PWD)/src:/app" \
 		-e FLASK_DEBUG=1 \
 		-e FLASK_ENV=development \
 		$(IMAGE_NAME)-dev

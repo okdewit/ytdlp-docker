@@ -20,12 +20,12 @@ WORKDIR /app
 RUN pip install flask apscheduler pony
 
 # Download yt-dlp
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /app/yt-dlp
-RUN chmod a+rwx /app/yt-dlp
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /usr/local/bin/yt-dlp
+RUN chmod a+rwx /usr/local/bin/yt-dlp
 
 # Don't copy source code - it will be mounted as a volume
 # Set environment variables for development
 ENV FLASK_DEBUG=1
 ENV FLASK_ENV=development
 
-CMD ["python", "src/app.py"]
+CMD ["python", "app.py"]

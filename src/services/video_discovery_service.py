@@ -40,10 +40,9 @@ class VideoDiscoveryService:
 
             # Get current parameters for filename generation
             parameters = get_parameters()
-            output_template = self._extract_output_template(parameters)
 
             for i, entry in enumerate(entries):
-                self._process_channel_video_entry(entry, i + 1, len(entries), channel, output_template)
+                self._process_channel_video_entry(entry, i + 1, len(entries), channel, parameters)
 
             logger.info(f'Populated {len(entries)} videos for channel: {channel["name"]}')
             return True
@@ -64,13 +63,12 @@ class VideoDiscoveryService:
         Returns:
             Expected filename string
         """
-        # Get current parameters and extract output template
+        # Get current parameters (full string)
         parameters = get_parameters()
-        output_template = self._extract_output_template(parameters)
 
-        if output_template:
-            # Try to get filename from yt-dlp
-            ytdlp_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
+        if parameters:
+            # Try to get filename from yt-dlp using full parameters
+            ytdlp_filename = self.metadata_service.get_ytdlp_filename(video_id, parameters)
             if ytdlp_filename:
                 return ytdlp_filename
 
@@ -86,6 +84,9 @@ class VideoDiscoveryService:
 
         Returns:
             Output template string or None if not found
+
+        Note: This method is kept for backward compatibility but is no longer used
+        since we now pass the full parameters to yt-dlp.
         """
         import shlex
 
@@ -106,7 +107,7 @@ class VideoDiscoveryService:
         return None
 
     def _process_channel_video_entry(self, entry: Dict, current_index: int, total_count: int,
-                                   channel: Dict, output_template: Optional[str]) -> None:
+                                   channel: Dict, parameters: str) -> None:
         """Process a single video entry from a channel's video list."""
         video_id = entry.get("id", "")
         if not video_id or video_exists(video_id):
@@ -117,21 +118,21 @@ class VideoDiscoveryService:
         # Try to get detailed info, fall back to basic info if it fails
         video_data = self.metadata_service.fetch_detailed_video_info(video_id)
         if video_data:
-            self._add_video_from_detailed_data(video_data, channel, output_template)
+            self._add_video_from_detailed_data(video_data, channel, parameters)
         else:
-            self._add_video_from_basic_data(entry, channel, output_template)
+            self._add_video_from_basic_data(entry, channel, parameters)
 
-    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict, output_template: Optional[str]) -> None:
+    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict, parameters: str) -> None:
         """Add video to database using detailed video data."""
         video_id = video_data.get("id", "")
         title = video_data.get("title", "Unknown Title")
         channel_id = channel.get("channel_id")
         channel_name = channel.get("name")
 
-        # Try to get yt-dlp's actual filename
+        # Try to get yt-dlp's actual filename using full parameters
         expected_filename = None
-        if output_template:
-            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
+        if parameters:
+            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, parameters)
 
         # Fallback if yt-dlp filename generation fails
         if not expected_filename:
@@ -139,17 +140,17 @@ class VideoDiscoveryService:
 
         add_video(video_id, title, channel_id, expected_filename)
 
-    def _add_video_from_basic_data(self, entry: Dict, channel: Dict, output_template: Optional[str]) -> None:
+    def _add_video_from_basic_data(self, entry: Dict, channel: Dict, parameters: str) -> None:
         """Add video to database using basic entry data (fallback)."""
         video_id = entry.get("id", "")
         title = entry.get("title", "Unknown Title")
         channel_id = channel.get("channel_id")
         channel_name = channel.get("name")
 
-        # Try to get yt-dlp's actual filename
+        # Try to get yt-dlp's actual filename using full parameters
         expected_filename = None
-        if output_template:
-            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
+        if parameters:
+            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, parameters)
 
         # Fallback if yt-dlp filename generation fails
         if not expected_filename:
