@@ -22,10 +22,7 @@
                             <div class="channel-id-label">{{ subscription.channel_id }}</div>
                             {% endif %}
 
-                            <div class="subscription-url">{{ subscription.url }}</div>
-
-                            <div class="subscription-status">
-                                <!-- Subscription behavior based on type -->
+                            <div class="subscription-url">
                                 <span class="subscription-behavior {{ subscription.type }}">
                                     {% if subscription.type == 'video' %}
                                         🎯 Single Video
@@ -37,6 +34,7 @@
                                         {{ subscription.type|title }}
                                     {% endif %}
                                 </span>
+                                {{ subscription.url }}
                             </div>
                         </div>
                     </div>
