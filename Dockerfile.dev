@@ -28,4 +28,4 @@ RUN chmod a+rwx /app/yt-dlp
 ENV FLASK_DEBUG=1
 ENV FLASK_ENV=development
 
-CMD ["python", "app.py"]
+CMD ["python", "src/app.py"]

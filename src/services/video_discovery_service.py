@@ -1,10 +1,9 @@
 """
-Video Discovery Service - Handles channel video population and filename generation.
-Responsible for discovering videos in channels and managing video metadata.
+Video Discovery Service - Enhanced to use yt-dlp's actual filename generation.
 """
 from typing import Dict, List, Optional
 from util import logger
-from database import get_channel_by_id, add_video, video_exists
+from database import get_channel_by_id, add_video, video_exists, get_parameters
 
 
 class VideoDiscoveryService:
@@ -39,8 +38,12 @@ class VideoDiscoveryService:
             entries = entries[:limit]
             logger.info(f"Processing {len(entries)} videos for channel: {channel['name']}")
 
+            # Get current parameters for filename generation
+            parameters = get_parameters()
+            output_template = self._extract_output_template(parameters)
+
             for i, entry in enumerate(entries):
-                self._process_channel_video_entry(entry, i + 1, len(entries), channel)
+                self._process_channel_video_entry(entry, i + 1, len(entries), channel, output_template)
 
             logger.info(f'Populated {len(entries)} videos for channel: {channel["name"]}')
             return True
@@ -49,40 +52,61 @@ class VideoDiscoveryService:
             logger.error(f"Error populating videos for channel {channel_id}: {e}")
             return False
 
-    def generate_video_filename(self, data: Dict, title: str, video_id: str, channel_name: str) -> str:
+    def generate_video_filename_with_ytdlp(self, video_id: str, title: str, channel_name: str) -> str:
         """
-        Generate expected filename for a video based on metadata.
+        Generate expected filename using yt-dlp's actual filename generation.
 
         Args:
-            data: Video metadata from ytdlp
-            title: Video title
             video_id: YouTube video ID
-            channel_name: Channel name as fallback
+            title: Video title (fallback)
+            channel_name: Channel name (fallback)
 
         Returns:
             Expected filename string
         """
-        # Get uploader with fallback handling
-        uploader = data.get("uploader", channel_name)
-        if not uploader or uploader == "None":
-            uploader = "Unknown"
+        # Get current parameters and extract output template
+        parameters = get_parameters()
+        output_template = self._extract_output_template(parameters)
 
-        # Clean uploader name to be filesystem-safe
-        uploader = self._clean_filename_part(uploader)
+        if output_template:
+            # Try to get filename from yt-dlp
+            ytdlp_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
+            if ytdlp_filename:
+                return ytdlp_filename
 
-        # Format upload date
-        upload_date = data.get("upload_date", "")
-        if upload_date and len(upload_date) >= 8:
-            formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
-        else:
-            formatted_date = "Unknown-Date"
+        # Fallback to our old method
+        return self._generate_fallback_filename(title, video_id, channel_name)
 
-        # Clean title
-        clean_title = self._clean_filename_part(title)
+    def _extract_output_template(self, parameters: str) -> Optional[str]:
+        """
+        Extract the -o parameter from the full parameters string.
 
-        return f"{uploader}/{formatted_date} - {clean_title} [{video_id}].mp4"
+        Args:
+            parameters: Full yt-dlp parameters string
 
-    def _process_channel_video_entry(self, entry: Dict, current_index: int, total_count: int, channel: Dict) -> None:
+        Returns:
+            Output template string or None if not found
+        """
+        import shlex
+
+        try:
+            # Parse the parameters string
+            args = shlex.split(parameters)
+
+            # Find the -o parameter
+            for i, arg in enumerate(args):
+                if arg == "-o" and i + 1 < len(args):
+                    return args[i + 1]
+                elif arg.startswith("-o="):
+                    return arg[3:]  # Remove "-o=" prefix
+
+        except Exception as e:
+            logger.warning(f"Failed to parse parameters: {e}")
+
+        return None
+
+    def _process_channel_video_entry(self, entry: Dict, current_index: int, total_count: int,
+                                   channel: Dict, output_template: Optional[str]) -> None:
         """Process a single video entry from a channel's video list."""
         video_id = entry.get("id", "")
         if not video_id or video_exists(video_id):
@@ -93,59 +117,59 @@ class VideoDiscoveryService:
         # Try to get detailed info, fall back to basic info if it fails
         video_data = self.metadata_service.fetch_detailed_video_info(video_id)
         if video_data:
-            self._add_video_from_detailed_data(video_data, channel)
+            self._add_video_from_detailed_data(video_data, channel, output_template)
         else:
-            self._add_video_from_basic_data(entry, channel)
+            self._add_video_from_basic_data(entry, channel, output_template)
 
-    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict) -> None:
+    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict, output_template: Optional[str]) -> None:
         """Add video to database using detailed video data."""
         video_id = video_data.get("id", "")
         title = video_data.get("title", "Unknown Title")
         channel_id = channel.get("channel_id")
         channel_name = channel.get("name")
 
-        # If we already have expected_filename from the metadata call, use it
-        expected_filename = video_data.get("expected_filename")
+        # Try to get yt-dlp's actual filename
+        expected_filename = None
+        if output_template:
+            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
 
+        # Fallback if yt-dlp filename generation fails
         if not expected_filename:
-            # Fallback to our current generation method
-            expected_filename = self.generate_video_filename(video_data, title, video_id, channel_name)
+            expected_filename = self._generate_fallback_filename(title, video_id, channel_name)
 
         add_video(video_id, title, channel_id, expected_filename)
 
-    def _add_video_from_basic_data(self, entry: Dict, channel: Dict) -> None:
+    def _add_video_from_basic_data(self, entry: Dict, channel: Dict, output_template: Optional[str]) -> None:
         """Add video to database using basic entry data (fallback)."""
         video_id = entry.get("id", "")
         title = entry.get("title", "Unknown Title")
-        uploader = channel.get("name", "Unknown")
         channel_id = channel.get("channel_id")
+        channel_name = channel.get("name")
 
-        expected_filename = self._generate_video_filename_from_data(
-            uploader, "", title, video_id, channel.get("name")
-        )
+        # Try to get yt-dlp's actual filename
+        expected_filename = None
+        if output_template:
+            expected_filename = self.metadata_service.get_ytdlp_filename(video_id, output_template)
+
+        # Fallback if yt-dlp filename generation fails
+        if not expected_filename:
+            expected_filename = self._generate_fallback_filename(title, video_id, channel_name)
 
         add_video(video_id, title, channel_id, expected_filename)
 
-    def _generate_video_filename_from_data(self, uploader: str, upload_date: str,
-                                           title: str, video_id: str, fallback_uploader: str) -> str:
-        """Generate filename from individual data components."""
-        # Clean uploader name
-        if not uploader or uploader == "None":
-            uploader = fallback_uploader if fallback_uploader else "Unknown"
-        uploader = self._clean_filename_part(uploader)
-
-        # Format date
-        if upload_date and len(upload_date) >= 8:
-            formatted_date = f"{upload_date[:4]}-{upload_date[4:6]}-{upload_date[6:8]}"
-        else:
-            formatted_date = "Unknown-Date"
-
-        # Clean title
+    def _generate_fallback_filename(self, title: str, video_id: str, channel_name: str) -> str:
+        """Generate filename using fallback method (our old logic)."""
+        uploader = self._clean_filename_part(channel_name) if channel_name else "Unknown"
         clean_title = self._clean_filename_part(title)
-
-        return f"{uploader}/{formatted_date} - {clean_title} [{video_id}].mp4"
+        return f"{uploader}/Unknown-Date - {clean_title} [{video_id}].mp4"
 
     @staticmethod
     def _clean_filename_part(name: str) -> str:
         """Clean a string to be safe for use in filenames."""
         return name.replace("/", "-").replace("\\", "-").strip()
+
+    # Keep the old method for backward compatibility
+    def generate_video_filename(self, data: Dict, title: str, video_id: str, channel_name: str) -> str:
+        """Legacy method - use generate_video_filename_with_ytdlp instead."""
+        logger.warning("Using legacy generate_video_filename method")
+        return self._generate_fallback_filename(title, video_id, channel_name)
