@@ -91,11 +91,21 @@ def _migrate_database_schema():
                     video_id TEXT NOT NULL UNIQUE,
                     title TEXT NOT NULL,
                     expected_filename TEXT,
+                    filesize INTEGER,
                     created_at TIMESTAMP NOT NULL,
                     channel INTEGER REFERENCES channels(id)
                 )
             ''')
             conn.commit()
+        else:
+            # Check if filesize column exists, add it if it doesn't
+            cursor.execute("PRAGMA table_info(videos)")
+            columns = [column[1] for column in cursor.fetchall()]
+
+            if 'filesize' not in columns:
+                logger.info("Adding filesize column to videos table")
+                cursor.execute('ALTER TABLE videos ADD COLUMN filesize INTEGER')
+                conn.commit()
 
         logger.info("Database schema migrations completed")
 

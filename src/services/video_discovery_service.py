@@ -1,5 +1,5 @@
 """
-Video Discovery Service - Enhanced to use yt-dlp's actual filename generation.
+Video Discovery Service - Enhanced to use yt-dlp's actual filename generation and filesize.
 """
 from typing import Dict, List, Optional
 from util import logger
@@ -75,6 +75,46 @@ class VideoDiscoveryService:
         # Fallback to our old method
         return self._generate_fallback_filename(title, video_id, channel_name)
 
+    def process_single_video_with_filesize(self, video_id: str, channel_id: str = None) -> Optional[Dict]:
+        """
+        Process a single video, getting both metadata and filesize.
+
+        Args:
+            video_id: YouTube video ID
+            channel_id: Optional channel ID for database relations
+
+        Returns:
+            Dict with video data or None if failed
+        """
+        try:
+            # Get comprehensive metadata including filesize
+            metadata = self.metadata_service.get_video_metadata_with_filesize(video_id)
+
+            if not metadata:
+                logger.error(f"Could not get metadata for video {video_id}")
+                return None
+
+            # Generate expected filename
+            title = metadata.get("title", "Unknown Title")
+            channel_name = metadata.get("uploader", "Unknown")
+            expected_filename = self.generate_video_filename_with_ytdlp(video_id, title, channel_name)
+
+            # Add to database with filesize
+            video_data = add_video(
+                video_id=video_id,
+                title=title,
+                channel_id=channel_id,
+                expected_filename=expected_filename,
+                filesize=metadata.get("filesize")
+            )
+
+            logger.info(f"Processed video with filesize: {title} - {metadata.get('filesize', 'unknown')} bytes")
+            return video_data
+
+        except Exception as e:
+            logger.error(f"Error processing video {video_id}: {e}")
+            return None
+
     def _extract_output_template(self, parameters: str) -> Optional[str]:
         """
         Extract the -o parameter from the full parameters string.
@@ -84,9 +124,6 @@ class VideoDiscoveryService:
 
         Returns:
             Output template string or None if not found
-
-        Note: This method is kept for backward compatibility but is no longer used
-        since we now pass the full parameters to yt-dlp.
         """
         import shlex
 
@@ -115,14 +152,17 @@ class VideoDiscoveryService:
 
         logger.info(f"Getting detailed info for video {current_index}/{total_count}: {video_id}")
 
+        # Get filesize separately for better reliability
+        filesize = self.metadata_service.get_video_filesize(video_id)
+
         # Try to get detailed info, fall back to basic info if it fails
         video_data = self.metadata_service.fetch_detailed_video_info(video_id)
         if video_data:
-            self._add_video_from_detailed_data(video_data, channel, parameters)
+            self._add_video_from_detailed_data(video_data, channel, parameters, filesize)
         else:
-            self._add_video_from_basic_data(entry, channel, parameters)
+            self._add_video_from_basic_data(entry, channel, parameters, filesize)
 
-    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict, parameters: str) -> None:
+    def _add_video_from_detailed_data(self, video_data: Dict, channel: Dict, parameters: str, filesize: Optional[int]) -> None:
         """Add video to database using detailed video data."""
         video_id = video_data.get("id", "")
         title = video_data.get("title", "Unknown Title")
@@ -138,9 +178,9 @@ class VideoDiscoveryService:
         if not expected_filename:
             expected_filename = self._generate_fallback_filename(title, video_id, channel_name)
 
-        add_video(video_id, title, channel_id, expected_filename)
+        add_video(video_id, title, channel_id, expected_filename, filesize)
 
-    def _add_video_from_basic_data(self, entry: Dict, channel: Dict, parameters: str) -> None:
+    def _add_video_from_basic_data(self, entry: Dict, channel: Dict, parameters: str, filesize: Optional[int]) -> None:
         """Add video to database using basic entry data (fallback)."""
         video_id = entry.get("id", "")
         title = entry.get("title", "Unknown Title")
@@ -156,7 +196,7 @@ class VideoDiscoveryService:
         if not expected_filename:
             expected_filename = self._generate_fallback_filename(title, video_id, channel_name)
 
-        add_video(video_id, title, channel_id, expected_filename)
+        add_video(video_id, title, channel_id, expected_filename, filesize)
 
     def _generate_fallback_filename(self, title: str, video_id: str, channel_name: str) -> str:
         """Generate filename using fallback method (our old logic)."""

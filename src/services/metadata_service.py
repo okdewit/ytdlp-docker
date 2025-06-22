@@ -1,5 +1,5 @@
 """
-Metadata Service - Enhanced with yt-dlp filename generation.
+Metadata Service - Enhanced with yt-dlp filename generation and filesize fetching.
 """
 import subprocess
 import json
@@ -116,6 +116,80 @@ class MetadataService:
             logger.warning(f"Failed to get yt-dlp filename for {video_id}: {e}")
 
         return None
+
+    def get_video_filesize(self, video_id: str) -> Optional[int]:
+        """
+        Get the filesize for a video using yt-dlp.
+
+        Args:
+            video_id: YouTube video ID
+
+        Returns:
+            Filesize in bytes or None if failed/unavailable
+        """
+        try:
+            result = subprocess.run([
+                YTDLP_BINARY, "--print", "%(filesize,filesize_approx)s",
+                f"https://www.youtube.com/watch?v={video_id}"
+            ], capture_output=True, text=True, check=True, timeout=self.timeout)
+
+            if result.returncode == 0:
+                filesize_str = result.stdout.strip()
+
+                # Handle different possible outputs
+                if filesize_str and filesize_str != "NA" and filesize_str != "None":
+                    try:
+                        # Try to parse as integer (bytes)
+                        filesize = int(float(filesize_str))
+                        if filesize > 0:
+                            logger.debug(f"Got filesize for {video_id}: {filesize} bytes")
+                            return filesize
+                    except (ValueError, TypeError):
+                        logger.debug(f"Could not parse filesize '{filesize_str}' for {video_id}")
+
+                logger.debug(f"No valid filesize available for {video_id}")
+                return None
+
+        except subprocess.TimeoutExpired:
+            logger.warning(f"Timeout getting filesize for {video_id}")
+        except subprocess.CalledProcessError as e:
+            logger.warning(f"yt-dlp failed to get filesize for {video_id}: {e.stderr}")
+        except Exception as e:
+            logger.warning(f"Unexpected error getting filesize for {video_id}: {e}")
+
+        return None
+
+    def get_video_metadata_with_filesize(self, video_id: str) -> Dict:
+        """
+        Get comprehensive metadata for a video including filesize.
+
+        Args:
+            video_id: YouTube video ID
+
+        Returns:
+            Dict with metadata including filesize
+        """
+        # Get detailed metadata
+        detailed_data = self.fetch_detailed_video_info(video_id)
+
+        # Get filesize separately (more reliable than JSON metadata)
+        filesize = self.get_video_filesize(video_id)
+
+        result = {
+            "video_id": video_id,
+            "filesize": filesize
+        }
+
+        if detailed_data:
+            result.update({
+                "title": detailed_data.get("title", "Unknown Title"),
+                "uploader": detailed_data.get("uploader", "Unknown"),
+                "channel_id": detailed_data.get("channel_id", ""),
+                "duration": detailed_data.get("duration"),
+                "upload_date": detailed_data.get("upload_date")
+            })
+
+        return result
 
     def determine_subscription_type(self, data: Dict) -> str:
         """
