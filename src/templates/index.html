@@ -211,16 +211,6 @@
             color: #f57c00;
         }
 
-        .download-status.failed {
-            background: #ffebee;
-            color: #c62828;
-        }
-
-        .download-status.partial {
-            background: #e1f5fe;
-            color: #0277bd;
-        }
-
         .expand-icon {
             font-size: 1.2em;
             color: #666;
@@ -347,6 +337,9 @@
             min-width: 0; /* Allows text to wrap/truncate */
         }
 
+        .download-status.downloaded { color: #28a745; }
+        .download-status.pending { color: #6c757d; }
+
         /* Responsive adjustments for smaller screens */
         @media (max-width: 768px) {
             .channel-info {
@@ -375,11 +368,6 @@
             .subscription-url {
                 font-size: 0.8em;
             }
-
-            .download-indicator.downloaded { color: #28a745; }
-            .download-indicator.pending { color: #6c757d; }
-            .download-status.downloaded { color: #28a745; }
-            .download-status.pending { color: #6c757d; }
         }
     </style>
 </head>
