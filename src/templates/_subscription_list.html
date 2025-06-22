@@ -16,8 +16,11 @@
                         <div class="channel-details">
                             <div class="channel-meta">
                                 <strong>{{ subscription.get('channel', 'Unknown Channel') }}</strong>
-                                {% if subscription.get('channel_id') %}• {{ subscription.channel_id }}{% endif %}
                             </div>
+
+                            {% if subscription.get('channel_id') %}
+                            <div class="channel-id-label">{{ subscription.channel_id }}</div>
+                            {% endif %}
 
                             <div class="subscription-url">{{ subscription.url }}</div>
 
