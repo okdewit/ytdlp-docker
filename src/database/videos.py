@@ -1,3 +1,4 @@
+import os
 from datetime import datetime
 from pony.orm import PrimaryKey, Required, Optional, db_session, desc, select
 from database.base import db
@@ -20,14 +21,16 @@ class Video(db.Entity):
 
 def _video_to_dict(video):
     """Convert a Video entity to a dictionary."""
+    expected_filename = video.expected_filename or ""
     return {
         "id": video.id,
         "video_id": video.video_id,
         "title": video.title,
-        "expected_filename": video.expected_filename or "",
+        "expected_filename": expected_filename,
         "created_at": video.created_at.isoformat(),
         "channel_id": video.channel.channel_id if video.channel else None,
-        "channel_name": video.channel.name if video.channel else None
+        "channel_name": video.channel.name if video.channel else None,
+        "is_downloaded": check_video_downloaded(expected_filename)
     }
 
 
@@ -87,3 +90,10 @@ def get_video_by_id(video_id):
 def video_exists(video_id):
     """Check if a video exists by video ID."""
     return Video.exists(video_id=video_id)
+
+def check_video_downloaded(expected_filename):
+    """Check if video file exists on disk"""
+    if not expected_filename:
+        return False
+    full_path = os.path.join("data", expected_filename)
+    return os.path.exists(full_path)

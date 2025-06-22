@@ -104,7 +104,12 @@ class VideoDiscoveryService:
         channel_id = channel.get("channel_id")
         channel_name = channel.get("name")
 
-        expected_filename = self.generate_video_filename(video_data, title, video_id, channel_name)
+        # If we already have expected_filename from the metadata call, use it
+        expected_filename = video_data.get("expected_filename")
+
+        if not expected_filename:
+            # Fallback to our current generation method
+            expected_filename = self.generate_video_filename(video_data, title, video_id, channel_name)
 
         add_video(video_id, title, channel_id, expected_filename)
 

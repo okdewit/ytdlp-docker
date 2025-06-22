@@ -124,23 +124,27 @@ class MetadataService:
             logger.error(f"Failed to fetch video list for channel {channel_id}: {e}")
             return []
 
-    def fetch_detailed_video_info(self, video_id: str) -> Optional[Dict]:
+    def fetch_detailed_video_info(self, video_id: str, output_template: str = None) -> Optional[Dict]:
         """
-        Fetch detailed info for a single video.
-
-        Args:
-            video_id: YouTube video ID
-
-        Returns:
-            Dict containing detailed video metadata or None if failed
+        Fetch detailed info for a single video, optionally with filename generation.
         """
+        cmd = [YTDLP_BINARY, "-J", f"https://www.youtube.com/watch?v={video_id}"]
+
+        if output_template:
+            cmd.extend(["-o", output_template])
+
         try:
-            result = subprocess.run([
-                YTDLP_BINARY, "-J", f"https://www.youtube.com/watch?v={video_id}"
-            ], capture_output=True, text=True, check=True, timeout=self.timeout)
+            result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=self.timeout)
+            data = json.loads(result.stdout)
 
-            return json.loads(result.stdout)
+            # If we used an output template, yt-dlp includes the filename in the response
+            if output_template and "requested_downloads" in data:
+                # yt-dlp puts the actual filename in requested_downloads[0]["filename"]
+                filename = data["requested_downloads"][0].get("filename")
+                if filename:
+                    data["expected_filename"] = filename
 
+            return data
         except Exception as e:
             logger.warning(f"Failed to get detailed info for video {video_id}: {e}")
             return None

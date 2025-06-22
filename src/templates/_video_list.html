@@ -4,9 +4,13 @@
             <div class="video-info">
                 <div class="video-title">{{ video.title }}</div>
                 <div class="video-meta">
-                    ID: {{ video.video_id }} • 
+                    <span class="download-indicator {{ 'downloaded' if video.is_downloaded else 'pending' }}">●</span>
+                    ID: {{ video.video_id }} •
                     {% if video.channel_name %}Channel: {{ video.channel_name }} • {% endif %}
-                    Added: {{ video.created_at[:10] }}
+                    Added: {{ video.created_at[:10] }} •
+                    <span class="download-status {{ 'downloaded' if video.is_downloaded else 'pending' }}">
+                        {{ 'Downloaded' if video.is_downloaded else 'Pending' }}
+                    </span>
                 </div>
                 {% if video.expected_filename %}
                     <div class="video-filename">{{ video.expected_filename }}</div>
