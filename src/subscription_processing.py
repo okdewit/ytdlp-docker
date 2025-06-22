@@ -1,4 +1,5 @@
 import subprocess, shlex
+from util import YTDLP_BINARY
 
 
 def process_subscription(subscription, parameters):
@@ -10,7 +11,7 @@ def process_subscription(subscription, parameters):
     subprocess.run(["echo", f"Processing {channel_name} ({url}) - type: {subscription_type}"])
 
     # Build command based on subscription type
-    cmd = ["./yt-dlp"] + shlex.split(parameters)
+    cmd = [YTDLP_BINARY] + shlex.split(parameters)
 
     # Add type-specific parameters
     if subscription_type == 'video':

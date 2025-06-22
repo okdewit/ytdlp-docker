@@ -20,8 +20,8 @@ WORKDIR /app
 RUN pip install flask apscheduler pony
 
 # Download yt-dlp
-RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o ./yt-dlp
-RUN chmod a+rwx ./yt-dlp
+RUN curl -L https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o /app/yt-dlp
+RUN chmod a+rwx /app/yt-dlp
 
 # Copy application source code
 COPY src/ /app/
