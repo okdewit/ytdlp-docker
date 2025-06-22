@@ -340,6 +340,32 @@
         .download-status.downloaded { color: #28a745; }
         .download-status.pending { color: #6c757d; }
 
+        .channel-stats {
+            color: #666;
+            font-weight: normal;
+            font-size: 0.9em;
+            margin-left: 0.5em;
+        }
+
+        .channel-stats::before {
+            content: " ";
+        }
+
+        .channel-stats {
+            font-family: monospace;
+        }
+
+        .channel-meta {
+            display: flex;
+            align-items: baseline;
+            flex-wrap: wrap;
+            gap: 0.25em;
+        }
+
+        .channel-stats {
+            white-space: nowrap;
+        }
+
         /* Responsive adjustments for smaller screens */
         @media (max-width: 768px) {
             .channel-info {

@@ -16,6 +16,14 @@
                         <div class="channel-details">
                             <div class="channel-meta">
                                 <strong>{{ subscription.get('channel', 'Unknown Channel') }}</strong>
+                                {% if subscription.stats and subscription.stats.total_count > 0 %}
+                                    <span class="channel-stats">
+                                        ({{ subscription.stats.downloaded_count }}/{{ subscription.stats.total_count }})
+                                        {% if subscription.stats.total_size_human != '0 B' %}
+                                            • ({{ subscription.stats.downloaded_size_human }} / {{ subscription.stats.total_size_human }})
+                                        {% endif %}
+                                    </span>
+                                {% endif %}
                             </div>
 
                             {% if subscription.get('channel_id') %}

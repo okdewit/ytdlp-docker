@@ -8,6 +8,9 @@
                     <span class="download-status {{ 'downloaded' if video.is_downloaded else 'pending' }}">
                         {{ 'Downloaded' if video.is_downloaded else 'Pending' }}
                     </span>
+                    {% if video.filesize_human %}
+                        • {{ video.filesize_human }}
+                    {% endif %}
                 </div>
                 {% if video.expected_filename %}
                     <div class="video-filename">{{ video.expected_filename }}</div>

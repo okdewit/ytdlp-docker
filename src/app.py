@@ -8,7 +8,7 @@ from util import logger
 from database import (
     get_config, get_all_subscriptions, get_subscription_by_url, add_subscription,
     remove_subscription, get_parameters, set_parameters, update_subscription,
-    init_database
+    init_database, get_channel_video_stats
 )
 
 app = Flask(__name__)
@@ -37,6 +37,23 @@ def index():
 def subscriptions():
     """Route for HTMX to load subscription list."""
     subscriptions = get_all_subscriptions()
+
+    # Enrich subscriptions with channel statistics
+    for subscription in subscriptions:
+        channel_id = subscription.get('channel_id')
+        if channel_id:
+            stats = get_channel_video_stats(channel_id)
+            subscription['stats'] = stats
+        else:
+            # Default stats for subscriptions without channel_id
+            subscription['stats'] = {
+                'total_count': 0,
+                'downloaded_count': 0,
+                'pending_count': 0,
+                'downloaded_size_human': '0 B',
+                'total_size_human': '0 B'
+            }
+
     return render_template("_subscription_list.html", subscriptions=subscriptions)
 
 @app.route("/items")
