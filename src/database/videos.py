@@ -13,7 +13,6 @@ class Video(db.Entity):
     id = PrimaryKey(int, auto=True)
     video_id = Required(str, unique=True)  # YouTube video ID
     title = Required(str)
-    expected_filename = Optional(str)  # Expected download filename
     filesize = Optional(int)  # File size in bytes (None if unknown)
     created_at = Required(datetime, default=lambda: datetime.now())
 
@@ -23,14 +22,12 @@ class Video(db.Entity):
 
 def _video_to_dict(video):
     """Convert a Video entity to a dictionary."""
-    expected_filename = video.expected_filename or ""
-    is_downloaded = check_video_downloaded_simple(video.video_id)
+    is_downloaded = check_video_downloaded(video.video_id)
 
     return {
         "id": video.id,
         "video_id": video.video_id,
         "title": video.title,
-        "expected_filename": expected_filename,
         "filesize": video.filesize,
         "filesize_human": format_filesize(video.filesize) if video.filesize else None,
         "created_at": video.created_at.isoformat(),
@@ -73,7 +70,7 @@ def get_channel_video_stats(channel_id):
     total_size = 0
 
     for video in videos:
-        is_downloaded = check_video_downloaded_simple(video.video_id)
+        is_downloaded = check_video_downloaded(video.video_id)
 
         if is_downloaded:
             downloaded_count += 1
@@ -95,7 +92,7 @@ def get_channel_video_stats(channel_id):
 
 
 @db_session
-def add_video(video_id, title, channel_id=None, expected_filename=None, filesize=None):
+def add_video(video_id, title, channel_id=None, filesize=None):
     """Add a video to the database."""
     try:
         if not video_exists(video_id):
@@ -109,7 +106,6 @@ def add_video(video_id, title, channel_id=None, expected_filename=None, filesize
             video = Video(
                 video_id=video_id,
                 title=title,
-                expected_filename=expected_filename,
                 filesize=filesize,
                 channel=channel
             )
@@ -151,19 +147,10 @@ def video_exists(video_id):
     return Video.exists(video_id=video_id)
 
 
-def check_video_downloaded(expected_filename):
-    """Check if video file exists on disk (OLD METHOD - for comparison only)"""
-    if not expected_filename:
-        return False
-    full_path = os.path.join("data", expected_filename)
-    return os.path.exists(full_path)
-
-
-def check_video_downloaded_simple(video_id: str, data_dir: str = "data") -> bool:
+def check_video_downloaded(video_id: str, data_dir: str = "data") -> bool:
     """
     Check if video file exists on disk by scanning for files containing [video_id].
 
-    This replaces the complex expected_filename approach with a simple file scan.
     Since yt-dlp always includes [video_id] in the filename, we can reliably
     detect downloaded videos without predicting the exact filename.
 
@@ -223,34 +210,6 @@ def find_video_file_path(video_id: str, data_dir: str = "data"):
             return os.path.relpath(match)
 
     return None
-
-
-def compare_detection_methods(video_id: str):
-    """
-    Compare the old and new detection methods for testing purposes.
-    This function can be removed once we're confident in the new approach.
-    """
-    video = get_video_by_id(video_id)
-    if not video:
-        return f"Video {video_id} not found in database"
-
-    # Old method
-    old_result = check_video_downloaded(video.get('expected_filename'))
-
-    # New method
-    new_result = check_video_downloaded_simple(video_id)
-
-    # File path detection
-    file_path = find_video_file_path(video_id)
-
-    return {
-        "video_id": video_id,
-        "expected_filename": video.get('expected_filename'),
-        "old_method": old_result,
-        "new_method": new_result,
-        "actual_file_path": file_path,
-        "methods_agree": old_result == new_result
-    }
 
 
 def format_filesize(size_bytes):

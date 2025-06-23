@@ -1,8 +1,7 @@
 """
-Subscription Service - Orchestrates subscription enrichment.
-Responsible for coordinating metadata, channel, and video operations.
+Subscription Service - Simplified without filename generation complexity.
 """
-from typing import Dict, Optional
+from typing import Dict
 from util import logger
 from database import add_channel, add_video
 
@@ -91,11 +90,7 @@ class SubscriptionService:
         channel_id = subscription.get("channel_id")
         channel_name = subscription.get("channel")
 
-        expected_filename = self.video_discovery_service.generate_video_filename(
-            data, title, video_id, channel_name
-        )
-
-        add_video(video_id, title, channel_id, expected_filename)
+        add_video(video_id, title, channel_id)
         logger.info(f'Added video to database: {title} ({video_id})')
 
         # Download thumbnail for single video's channel

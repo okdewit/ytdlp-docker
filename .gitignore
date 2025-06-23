@@ -1,3 +1,8 @@
 .idea
 config
 data
+*.log
+src/__pycache__/
+src/**/__pycache__/
+src/**/*.pyc
+.DS_Store

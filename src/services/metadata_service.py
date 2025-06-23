@@ -1,9 +1,8 @@
 """
-Metadata Service - Enhanced with yt-dlp filename generation and filesize fetching.
+Metadata Service - Simplified without filename generation complexity.
 """
 import subprocess
 import json
-import shlex
 from typing import Dict, Optional, List
 from util import logger, YTDLP_BINARY
 
@@ -42,78 +41,6 @@ class MetadataService:
             logger.error(f"Failed to parse JSON from yt-dlp for {url}: {e}")
         except Exception as e:
             logger.error(f"Unexpected error getting info for {url}: {e}")
-
-        return None
-
-    def get_ytdlp_filename(self, video_id: str, parameters: str) -> Optional[str]:
-        """
-        Get the actual filename that yt-dlp would generate for a video using essential parameters.
-
-        Args:
-            video_id: YouTube video ID
-            parameters: Full yt-dlp parameters string
-
-        Returns:
-            Expected filename or None if failed
-        """
-        try:
-            # Parse the parameters and extract only filename-relevant ones
-            import shlex
-            args = shlex.split(parameters)
-
-            # Filter to only include parameters that affect filename generation
-            filename_relevant_args = []
-            i = 0
-            while i < len(args):
-                arg = args[i]
-
-                # Include these parameters that affect filename
-                if arg in ['-f', '--format']:
-                    filename_relevant_args.extend([arg, args[i + 1]])
-                    i += 2
-                elif arg in ['-o', '--output']:
-                    filename_relevant_args.extend([arg, args[i + 1]])
-                    i += 2
-                elif arg in ['--merge-output-format']:
-                    filename_relevant_args.extend([arg, args[i + 1]])
-                    i += 2
-                elif arg in ['-P']:
-                    filename_relevant_args.extend([arg, args[i + 1]])
-                    i += 2
-                elif arg.startswith('-f=') or arg.startswith('--format='):
-                    filename_relevant_args.append(arg)
-                    i += 1
-                elif arg.startswith('-o=') or arg.startswith('--output='):
-                    filename_relevant_args.append(arg)
-                    i += 1
-                elif arg.startswith('--merge-output-format='):
-                    filename_relevant_args.append(arg)
-                    i += 1
-                else:
-                    i += 1
-
-            cmd = [YTDLP_BINARY, "--print", "filename"] + filename_relevant_args + [f"https://www.youtube.com/watch?v={video_id}"]
-
-            logger.debug(f"Running yt-dlp filename command: {' '.join(cmd)}")
-
-            result = subprocess.run(cmd, capture_output=True, text=True, check=True, timeout=self.timeout)
-
-            if result.returncode == 0:
-                filename = result.stdout.strip()
-
-                # Remove the data/ prefix if present (since we add it back in check_video_downloaded)
-                if filename.startswith("data/"):
-                    filename = filename[5:]  # Remove "data/" prefix
-
-                logger.debug(f"yt-dlp would generate filename: {filename}")
-                return filename
-            else:
-                logger.warning(f"yt-dlp filename command failed with return code {result.returncode}")
-                if result.stderr:
-                    logger.warning(f"yt-dlp stderr: {result.stderr}")
-
-        except Exception as e:
-            logger.warning(f"Failed to get yt-dlp filename for {video_id}: {e}")
 
         return None
 
