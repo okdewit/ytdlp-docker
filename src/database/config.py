@@ -12,7 +12,21 @@ class Config(db.Entity):
     updated_at = Required(datetime, default=lambda: datetime.now())
 
 # Default yt-dlp parameters
-DEFAULT_PARAMETERS = '-f "bv[vcodec^=av01][height<=1080]+ba/bv[ext=mp4][height<=1080]+ba/b[height<=1080]" --merge-output-format mp4 -o "%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s" --write-subs --sub-langs "en.*" --download-archive data/downloaded.txt --sponsorblock-mark all --sponsorblock-remove sponsor --embed-metadata --embed-thumbnail --write-info-json --write-desktop-link --write-description --write-thumbnail --convert-thumbnail jpg -P "data"'
+DEFAULT_PARAMETERS = ('-f "bv[vcodec^=av01][height<=1080]+ba/bv[ext=mp4][height<=1080]+ba/b[height<=1080]" '
+                     +'--merge-output-format mp4 '
+                     +'-o "%(uploader)s/%(upload_date>%Y-%m-%d)s - %(title)s [%(id)s].%(ext)s" '
+                     +'--write-subs --sub-langs "en.*" '
+                     +'--download-archive data/downloaded.txt '
+                     +'--sponsorblock-mark all '
+                     +'--sponsorblock-remove sponsor '
+                     +'--embed-metadata '
+                     +'--embed-thumbnail '
+                     +'--write-info-json '
+                     +'--write-desktop-link '
+                     +'--write-description '
+                     +'--write-thumbnail '
+                     +'--convert-thumbnail jpg '
+                     +'-P "data"')
 
 
 def init_default_config():
