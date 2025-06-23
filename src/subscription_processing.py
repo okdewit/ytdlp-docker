@@ -1,5 +1,5 @@
 import subprocess, shlex
-from util import YTDLP_BINARY
+from util import YTDLP_BINARY, logger
 
 
 def process_subscription(subscription, parameters):
@@ -8,35 +8,46 @@ def process_subscription(subscription, parameters):
     subscription_type = subscription.get('type', 'video')
     channel_name = subscription.get('channel', 'Unknown')
 
-    subprocess.run(["echo", f"Processing {channel_name} ({url}) - type: {subscription_type}"])
+    logger.info(f"Processing {channel_name} ({url}) - type: {subscription_type}")
 
-    # Build command based on subscription type
+    # Build base command with user parameters
     cmd = [YTDLP_BINARY] + shlex.split(parameters)
+    cmd.append(url)
 
-    # Add type-specific parameters
-    if subscription_type == 'video':
-        # Download only the specific video
-        cmd.append(url)
-    elif subscription_type == 'channel':
-        # Download all videos from the channel
-        if subscription.get('channel_id'):
-            cmd.extend(['--download-archive', 'data/downloaded.txt'])
-            cmd.append(f"https://www.youtube.com/channel/{subscription['channel_id']}/videos")
+    logger.info(f"Executing command: {' '.join(cmd)}")
+
+    try:
+        result = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            timeout=3600  # 1 hour timeout for large downloads
+        )
+
+        # Log the output for visibility
+        if result.stdout:
+            logger.info(f"yt-dlp stdout for {channel_name}:")
+            for line in result.stdout.strip().split('\n'):
+                if line.strip():
+                    logger.info(f"  {line}")
+
+        if result.stderr:
+            logger.warning(f"yt-dlp stderr for {channel_name}:")
+            for line in result.stderr.strip().split('\n'):
+                if line.strip():
+                    logger.warning(f"  {line}")
+
+        if result.returncode == 0:
+            logger.info(f"Successfully completed processing {channel_name}")
         else:
-            cmd.append(url)  # Fallback to original URL
-    elif subscription_type == 'playlist':
-        # Download the specific playlist
-        cmd.extend(['--download-archive', 'data/downloaded.txt'])
-        cmd.append(url)
-    else:
-        # Default behavior
-        cmd.append(url)
+            logger.error(f"yt-dlp failed for {channel_name} with return code {result.returncode}")
 
-    result = subprocess.run(
-        cmd,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True
-    )
-    subprocess.run(["echo", f"Done with {channel_name} - type: {subscription_type}"])
-    return result
+        return result
+
+    except subprocess.TimeoutExpired:
+        logger.error(f"Timeout processing {channel_name} - operation took longer than 1 hour")
+        return None
+    except Exception as e:
+        logger.error(f"Unexpected error processing {channel_name}: {e}")
+        return None
