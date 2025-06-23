@@ -1,4 +1,5 @@
 import os
+import glob
 from datetime import datetime
 from pony.orm import PrimaryKey, Required, Optional, db_session, desc, select
 from database.base import db
@@ -23,7 +24,7 @@ class Video(db.Entity):
 def _video_to_dict(video):
     """Convert a Video entity to a dictionary."""
     expected_filename = video.expected_filename or ""
-    is_downloaded = check_video_downloaded(expected_filename)
+    is_downloaded = check_video_downloaded_simple(video.video_id)
 
     return {
         "id": video.id,
@@ -72,8 +73,7 @@ def get_channel_video_stats(channel_id):
     total_size = 0
 
     for video in videos:
-        expected_filename = video.expected_filename or ""
-        is_downloaded = check_video_downloaded(expected_filename)
+        is_downloaded = check_video_downloaded_simple(video.video_id)
 
         if is_downloaded:
             downloaded_count += 1
@@ -152,11 +152,105 @@ def video_exists(video_id):
 
 
 def check_video_downloaded(expected_filename):
-    """Check if video file exists on disk"""
+    """Check if video file exists on disk (OLD METHOD - for comparison only)"""
     if not expected_filename:
         return False
     full_path = os.path.join("data", expected_filename)
     return os.path.exists(full_path)
+
+
+def check_video_downloaded_simple(video_id: str, data_dir: str = "data") -> bool:
+    """
+    Check if video file exists on disk by scanning for files containing [video_id].
+
+    This replaces the complex expected_filename approach with a simple file scan.
+    Since yt-dlp always includes [video_id] in the filename, we can reliably
+    detect downloaded videos without predicting the exact filename.
+
+    Args:
+        video_id: YouTube video ID (e.g., "YuojAtE8YCY")
+        data_dir: Directory to search in (default: "data")
+
+    Returns:
+        True if video file exists, False otherwise
+    """
+    if not video_id:
+        return False
+
+    # Use a broader search first to find any files containing the video_id
+    pattern = os.path.join(data_dir, "**", f"*{video_id}*")
+    matches = glob.glob(pattern, recursive=True)
+
+    # Filter matches to only include video files with [video_id] in the name
+    video_extensions = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.m4v']
+    target_pattern = f"[{video_id}]"
+
+    for match in matches:
+        # Check if it's a video file and contains [video_id]
+        if (any(match.lower().endswith(ext) for ext in video_extensions) and
+            target_pattern in match):
+            return True
+
+    return False
+
+
+def find_video_file_path(video_id: str, data_dir: str = "data"):
+    """
+    Find the actual file path for a downloaded video.
+
+    Args:
+        video_id: YouTube video ID
+        data_dir: Directory to search in
+
+    Returns:
+        Relative path to the video file, or None if not found
+    """
+    if not video_id:
+        return None
+
+    # Use a broader search first to find any files containing the video_id
+    pattern = os.path.join(data_dir, "**", f"*{video_id}*")
+    matches = glob.glob(pattern, recursive=True)
+
+    # Filter matches to only include video files with [video_id] in the name
+    video_extensions = ['.mp4', '.mkv', '.webm', '.avi', '.mov', '.flv', '.m4v']
+    target_pattern = f"[{video_id}]"
+
+    for match in matches:
+        # Check if it's a video file and contains [video_id]
+        if (any(match.lower().endswith(ext) for ext in video_extensions) and
+            target_pattern in match):
+            return os.path.relpath(match)
+
+    return None
+
+
+def compare_detection_methods(video_id: str):
+    """
+    Compare the old and new detection methods for testing purposes.
+    This function can be removed once we're confident in the new approach.
+    """
+    video = get_video_by_id(video_id)
+    if not video:
+        return f"Video {video_id} not found in database"
+
+    # Old method
+    old_result = check_video_downloaded(video.get('expected_filename'))
+
+    # New method
+    new_result = check_video_downloaded_simple(video_id)
+
+    # File path detection
+    file_path = find_video_file_path(video_id)
+
+    return {
+        "video_id": video_id,
+        "expected_filename": video.get('expected_filename'),
+        "old_method": old_result,
+        "new_method": new_result,
+        "actual_file_path": file_path,
+        "methods_agree": old_result == new_result
+    }
 
 
 def format_filesize(size_bytes):
