@@ -1,4 +1,5 @@
 from flask import Flask, render_template, request, send_from_directory
+from flask_socketio import SocketIO, emit
 from apscheduler.schedulers.background import BackgroundScheduler
 from urllib.parse import unquote
 import os
@@ -10,8 +11,16 @@ from database import (
     remove_subscription, get_parameters, set_parameters, update_subscription,
     init_database, get_channel_video_stats
 )
+# Import WebSocket utilities
+from websocket_events import init_websocket_events, emit_subscription_event
 
 app = Flask(__name__)
+app.config['SECRET_KEY'] = 'your-secret-key-here'  # Change this in production
+socketio = SocketIO(app, cors_allowed_origins="*")
+
+# Initialize WebSocket events
+init_websocket_events(socketio)
+
 scheduler = BackgroundScheduler()
 scheduler.start()
 
@@ -79,10 +88,76 @@ def add_subscription_route():
         # Check if subscription already exists
         existing_subscription = get_subscription_by_url(subscription_url)
         if not existing_subscription:
-            new_subscription = {"url": subscription_url}
-            if enrich_subscription(new_subscription):
-                add_subscription(new_subscription)
+            # Create initial subscription entry with minimal data
+            new_subscription = {
+                "url": subscription_url,
+                "type": "",
+                "channel": "Processing...",
+                "channel_id": "",
+                "_enriching": True  # Flag to show this is being processed
+            }
 
+            # Add placeholder to database immediately
+            add_subscription(new_subscription)
+
+            # Emit initial event
+            emit_subscription_event("started", {
+                "url": subscription_url,
+                "message": "Starting subscription enrichment..."
+            })
+
+            # Get current subscriptions including the new placeholder
+            subscriptions = get_all_subscriptions()
+
+            # Mark the new one as enriching and add stats
+            for subscription in subscriptions:
+                if subscription['url'] == subscription_url:
+                    subscription['_enriching'] = True
+
+                # Add default stats for display
+                channel_id = subscription.get('channel_id')
+                if channel_id:
+                    stats = get_channel_video_stats(channel_id)
+                    subscription['stats'] = stats
+                else:
+                    subscription['stats'] = {
+                        'total_count': 0,
+                        'downloaded_count': 0,
+                        'pending_count': 0,
+                        'downloaded_size_human': '0 B',
+                        'total_size_human': '0 B'
+                    }
+
+            # Return the updated list immediately (with placeholder)
+            response_html = render_template("_subscription_list.html", subscriptions=subscriptions)
+
+            # Start enrichment process in background (this will emit more events)
+            # We need to do this after returning the response, so let's use a background task
+            from threading import Thread
+            def enrich_in_background():
+                if enrich_subscription(new_subscription):
+                    # Update the database with enriched data
+                    update_subscription(new_subscription)
+
+                    emit_subscription_event("complete", {
+                        "url": subscription_url,
+                        "message": "Subscription enrichment complete!",
+                        "subscription": new_subscription
+                    })
+                else:
+                    emit_subscription_event("error", {
+                        "url": subscription_url,
+                        "message": "Failed to enrich subscription"
+                    })
+
+            # Start background enrichment
+            thread = Thread(target=enrich_in_background)
+            thread.daemon = True
+            thread.start()
+
+            return response_html
+
+    # If no URL or subscription exists, just return current list
     subscriptions = get_all_subscriptions()
     return render_template("_subscription_list.html", subscriptions=subscriptions)
 
@@ -109,9 +184,21 @@ def update_subscription_route(url):
     if not subscription:
         return "Subscription not found", 404
 
+    # Emit start event
+    emit_subscription_event("update_started", {
+        "url": decoded_url,
+        "message": f"Starting update for {subscription.get('channel', 'subscription')}..."
+    })
+
     parameters = get_parameters()
     process_subscription(subscription, parameters)
     update_subscription(subscription)
+
+    # Emit complete event
+    emit_subscription_event("update_complete", {
+        "url": decoded_url,
+        "message": f"Update complete for {subscription.get('channel', 'subscription')}"
+    })
 
     subscriptions = get_all_subscriptions()
     return render_template("_subscription_list.html", subscriptions=subscriptions)
@@ -128,10 +215,27 @@ def get_videos_for_channel(channel_id):
 
     return render_template("_video_list.html", videos=videos)
 
+
+# WebSocket event handlers
+@socketio.on('connect')
+def handle_connect():
+    """Handle new WebSocket connection."""
+    logger.info('Client connected to WebSocket')
+    emit('connected', {'message': 'Connected to YTDLP manager'})
+
+
+@socketio.on('disconnect')
+def handle_disconnect():
+    """Handle WebSocket disconnection."""
+    logger.info('Client disconnected from WebSocket')
+
+
 # Initialize database on startup
 init_database()
 
 scheduler.add_job(scheduled_task, "interval", minutes=120)
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0")
+    # Use socketio.run instead of app.run for WebSocket support
+    # allow_unsafe_werkzeug=True is needed for development/testing
+    socketio.run(app, host="0.0.0.0", debug=True, allow_unsafe_werkzeug=True)
